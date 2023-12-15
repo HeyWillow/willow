@@ -315,6 +315,18 @@ static void IRAM_ATTR cb_ws_event(const void *arg_evh, const esp_event_base_t *b
                         goto cleanup;
                     }
 
+                    if (strcmp(json_cmd->valuestring, "srmodels_ota_start") == 0) {
+                        cJSON *json_ota_url = cJSON_GetObjectItemCaseSensitive(cjson, "ota_url");
+                        if (cJSON_IsString(json_ota_url) && json_ota_url->valuestring != NULL) {
+                            // we can't pass json_ota_url->valuestring to ota_start
+                            // it will be freed before the OTA task reads it
+                            char *ota_url = strndup(json_ota_url->valuestring, (strlen(json_ota_url->valuestring)));
+                            ESP_LOGI(TAG, "OTA URL: %s", ota_url);
+                            srmodels_ota_start(ota_url);
+                        }
+                        goto cleanup;
+                    }
+
                     if (strcmp(json_cmd->valuestring, "restart") == 0) {
                         ESP_LOGI(TAG, "restart command received. restart");
                         if (lvgl_port_lock(lvgl_lock_timeout)) {
