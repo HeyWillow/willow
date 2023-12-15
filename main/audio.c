@@ -1028,9 +1028,27 @@ esp_err_t init_audio(void)
     char *speech_rec_mode = config_get_char("speech_rec_mode", DEFAULT_SPEECH_REC_MODE);
     char *wake_word = config_get_char("wake_word", DEFAULT_WAKE_WORD);
     esp_err_t ret = ESP_OK;
+    srmodel_list_t *models = esp_srmodel_init(PARTLABEL_SRMODELS);
+
+    if (models == NULL) {
+        ui_pr_err("No wake words found", "Apply settings via WAS");
+        return ESP_FAIL;
+    } else {
+        bool found = false;
+        for (int i = 0; i < models->num; i++) {
+            ESP_LOGI(TAG, "found SR model: %s", models->model_name[i]);
+            if (strstr(models->model_name[i], wake_word)) {
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            ui_pr_err("Wake word not supported", "Apply settings via WAS");
+            return ESP_FAIL;
+        }
+    }
 
     check_mute();
-
     hdl_ahc = audio_board_codec_init();
     gpio_set_level(get_pa_enable_gpio(), 0);
     ret = audio_hal_ctrl_codec(hdl_ahc, AUDIO_HAL_CODEC_MODE_DECODE, AUDIO_HAL_CTRL_START);
@@ -1058,17 +1076,11 @@ esp_err_t init_audio(void)
 
     char wake_help[STR_WAKE_LEN] = "";
     if (strcmp(wake_word, "hiesp") == 0) {
-#if defined(CONFIG_SR_WN_WN9_HIESP) || defined(CONFIG_SR_WN_WN9_HIESP_MULTI)
         strncpy(wake_help, "Say 'Hi ESP' to start!", STR_WAKE_LEN);
-#endif
     } else if (strcmp(wake_word, "alexa") == 0) {
-#if defined(CONFIG_SR_WN_WN9_ALEXA) || defined(CONFIG_SR_WN_WN9_ALEXA_MULTI)
         strncpy(wake_help, "Say 'Alexa' to start!", STR_WAKE_LEN);
-#endif
     } else if (strcmp(wake_word, "hilexin") == 0) {
-#if defined(CONFIG_SR_WN_WN9_HILEXIN) || defined(CONFIG_SR_WN_WN9_HILEXIN_MULTI)
         strncpy(wake_help, "Say 'Hi Lexin' to start!", STR_WAKE_LEN);
-#endif
     }
 
     if (strlen(wake_help) == 0) {
