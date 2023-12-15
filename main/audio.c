@@ -1097,6 +1097,9 @@ void deinit_audio(void)
     if (hdl_ar != NULL) {
         audio_recorder_destroy(hdl_ar);
     }
+    if (hdl_sr != NULL) {
+        recorder_sr_destroy(hdl_sr);
+    }
     if (hdl_at != NULL) {
         vTaskDelete(hdl_at);
     }
