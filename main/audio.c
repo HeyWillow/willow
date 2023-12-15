@@ -61,9 +61,10 @@
 
 #define HTTP_STREAM_TIMEOUT_MS 10 * 1000
 
-#define MULTINET_TWDT   30
-#define STR_WAKE_LEN    25
-#define WIS_URL_TTS_ARG "?format=WAV&speaker=CLB&text="
+#define PARTLABEL_SRMODELS "model"
+#define MULTINET_TWDT      30
+#define STR_WAKE_LEN       25
+#define WIS_URL_TTS_ARG    "?format=WAV&speaker=CLB&text="
 
 typedef enum willow_http_stream {
     WILLOW_HS_ESP_AUDIO,
@@ -835,7 +836,7 @@ static esp_err_t start_rec(void)
         .fetch_task_prio = FETCH_TASK_PRIO,
         .fetch_task_stack = FETCH_TASK_STACK_SZ,
         .rb_size = 12 * 1024, // default is 6 * 1024
-        .partition_label = "model",
+        .partition_label = PARTLABEL_SRMODELS,
         .mn_language = ESP_MN_ENGLISH,
         .wn_wakeword = wake_word,
     };
