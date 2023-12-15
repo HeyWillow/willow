@@ -74,6 +74,7 @@ QueueHandle_t q_ea, q_rec;
 audio_hal_handle_t hdl_aha = NULL, hdl_ahc = NULL;
 audio_rec_handle_t hdl_ar = NULL;
 esp_audio_handle_t hdl_ea = NULL;
+recorder_sr_handle_t hdl_sr = NULL;
 volatile bool multiwake_won = false;
 volatile bool recording = false;
 static audio_element_handle_t hdl_ae_hs, hdl_ae_rs_from_i2s, hdl_ae_rs_to_api = NULL;
@@ -905,7 +906,9 @@ static esp_err_t start_rec(void)
         .encoder_handle = NULL,
         .encoder_iface = NULL,
     };
-    cfg_ar.sr_handle = recorder_sr_create(&cfg_srr, &cfg_ar.sr_iface);
+
+    hdl_sr = recorder_sr_create(&cfg_srr, &cfg_ar.sr_iface);
+    cfg_ar.sr_handle = hdl_sr;
     if (strcmp(audio_codec, "AMR-WB") == 0 || strcmp(audio_codec, "WAV") == 0) {
         ESP_LOGI(TAG, "Using recorder encoder");
         cfg_ar.encoder_handle = recorder_encoder_create(&recorder_encoder_cfg, &cfg_ar.encoder_iface);
