@@ -1023,12 +1023,17 @@ void init_adc(void)
     hdl_aha->audio_codec_set_volume(config_get_int("mic_gain", DEFAULT_MIC_GAIN));
 }
 
+void init_models(void)
+{
+    esp_srmodel_init(PARTLABEL_SRMODELS);
+}
+
 esp_err_t init_audio(void)
 {
     char *speech_rec_mode = config_get_char("speech_rec_mode", DEFAULT_SPEECH_REC_MODE);
     char *wake_word = config_get_char("wake_word", DEFAULT_WAKE_WORD);
     esp_err_t ret = ESP_OK;
-    srmodel_list_t *models = esp_srmodel_init(PARTLABEL_SRMODELS);
+    srmodel_list_t *models = get_static_srmodels();
 
     if (models == NULL) {
         ui_pr_err("No wake words found", "Apply settings via WAS");

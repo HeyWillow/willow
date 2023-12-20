@@ -145,6 +145,9 @@ void app_main(void)
         goto err_nvs;
     }
     state = STATE_NVS_OK;
+
+    init_models();
+
     err = init_was();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to initialize Willow Application Server connection");
