@@ -55,6 +55,7 @@
 #define DEFAULT_VAD_MODE            3
 #define DEFAULT_VAD_TIMEOUT         300
 #define DEFAULT_WAKE_MODE           "2CH_90"
+#define DEFAULT_WAKE_MODEL          "wn9_hiesp"
 #define DEFAULT_WAKE_WORD           "hiesp"
 #define DEFAULT_WIS_TTS_URL         "https://infer.tovera.io/api/tts"
 #define DEFAULT_WIS_URL             "https://infer.tovera.io/api/willow"
@@ -824,7 +825,11 @@ static esp_err_t start_rec(void)
     // E (5727) AFE_SR: sample_rate only support 16000, please modify it!
     // cfg_srr.afe_cfg.pcm_config.sample_rate = CFG_AUDIO_SR_SAMPLE_RATE;
 
-    char *wake_word = config_get_char("wake_word", DEFAULT_WAKE_WORD);
+    char *wake_word;
+    wake_word = config_get_char("wake_model", DEFAULT_WAKE_MODEL);
+    if (wake_word == NULL) {
+        wake_word = config_get_char("wake_word", DEFAULT_WAKE_WORD);
+    }
     recorder_sr_cfg_t cfg_srr = {
         .afe_cfg = cfg_afe,
         .input_order = INPUT_ORDER_DEFAULT(),
@@ -1031,9 +1036,14 @@ void init_models(void)
 esp_err_t init_audio(void)
 {
     char *speech_rec_mode = config_get_char("speech_rec_mode", DEFAULT_SPEECH_REC_MODE);
-    char *wake_word = config_get_char("wake_word", DEFAULT_WAKE_WORD);
+    char *wake_word;
     esp_err_t ret = ESP_OK;
     srmodel_list_t *models = get_static_srmodels();
+
+    wake_word = config_get_char("wake_model", DEFAULT_WAKE_MODEL);
+    if (wake_word == NULL) {
+        wake_word = config_get_char("wake_word", DEFAULT_WAKE_WORD);
+    }
 
     if (models == NULL) {
         ui_pr_err("No wake words found", "Apply settings via WAS");
