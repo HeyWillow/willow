@@ -20,8 +20,6 @@ static const char *willow_hw_t[WILLOW_HW_MAX] = {
     [WILLOW_HW_ESP32_S3_BOX_3] = "ESP32-S3-BOX-3",
 };
 
-volatile bool restarting = false;
-
 const char *str_hw_type(int id)
 {
     if (id < 0 || id >= WILLOW_HW_MAX || !willow_hw_t[id]) {
@@ -62,6 +60,7 @@ void init_system(void)
 
 void restart_delayed(void)
 {
+    state = STATE_RESTARTING;
     uint32_t delay = esp_random() % 9;
     if (delay < 3) {
         delay = 3;

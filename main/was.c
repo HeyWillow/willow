@@ -382,7 +382,7 @@ void was_deinit_task(void *data)
 
 void deinit_was(void)
 {
-    restarting = true;
+    state = STATE_RESTARTING;
     send_hello_goodbye("goodbye");
     // needs to be done in a task to avoid this error:
     // WEBSOCKET_CLIENT: Client cannot be stopped from websocket task
@@ -393,7 +393,7 @@ void deinit_was(void)
 
 esp_err_t init_was(void)
 {
-    if (restarting) {
+    if (state == STATE_RESTARTING) {
         return ESP_OK;
     }
 
