@@ -73,6 +73,10 @@ static void IRAM_ATTR cb_ws_event(const void *arg_evh, const esp_event_base_t *b
                 ESP_LOGI(TAG, "received text data on WebSocket: %s", resp);
                 cJSON *cjson = cJSON_Parse(resp);
 
+                if (unlikely(state == STATE_NEED_CONFIG)) {
+                    goto config;
+                }
+
                 // latency sensitive so handle this first
                 cJSON *json_wake_result = cJSON_GetObjectItemCaseSensitive(cjson, "wake_result");
                 if (cJSON_IsObject(json_wake_result)) {
@@ -119,12 +123,15 @@ static void IRAM_ATTR cb_ws_event(const void *arg_evh, const esp_event_base_t *b
                     goto cleanup;
                 }
 
+config:
                 cJSON *json_config = cJSON_GetObjectItemCaseSensitive(cjson, "config");
                 if (cJSON_IsObject(json_config)) {
                     char *config = cJSON_Print(json_config);
                     ESP_LOGI(TAG, "found config in WebSocket message: %s", config);
                     config_write(config);
                     cJSON_free(config);
+                    goto cleanup;
+                } else if (state == STATE_NEED_CONFIG) {
                     goto cleanup;
                 }
 

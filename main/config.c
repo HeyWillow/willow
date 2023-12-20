@@ -131,9 +131,12 @@ cleanup:
 
 void config_write(const char *data)
 {
+    if (state < STATE_NEED_CONFIG) {
+        deinit_audio();
+        deinit_hass();
+    }
+
     state = STATE_WRITE_FLASH;
-    deinit_audio();
-    deinit_hass();
 
     FILE *f = fopen(CONFIG_PATH, "w");
     if (f == NULL) {

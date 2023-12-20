@@ -254,21 +254,28 @@ void srmodels_ota_task(void *data)
 
     ESP_LOGI(TAG, "total srmodels OTA data written: %d byte", ota_len);
 
-    ESP_LOGI(TAG, "srmodels OTA completed, restarting");
+    ESP_LOGI(TAG, "srmodels OTA completed, requesting new config");
     if (lvgl_port_lock(lvgl_lock_timeout)) {
         lv_label_set_text_static(lbl_ln3, "Upgrade Done");
         lvgl_port_unlock();
     }
-    restart_delayed();
+    state = STATE_NEED_CONFIG;
+    request_config();
 err:
     esp_http_client_close(hdl_hc);
     esp_http_client_cleanup(hdl_hc);
+
+    if (state >= STATE_NEED_CONFIG) {
+        goto delete;
+    }
+
     ESP_LOGI(TAG, "srmodels OTA failed, restarting");
     if (lvgl_port_lock(lvgl_lock_timeout)) {
         lv_label_set_text_static(lbl_ln3, "Upgrade Failed");
         lvgl_port_unlock();
     }
     restart_delayed();
+delete:
     vTaskDelete(NULL);
 }
 
