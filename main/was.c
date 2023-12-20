@@ -65,6 +65,9 @@ static void IRAM_ATTR cb_ws_event(const void *arg_evh, const esp_event_base_t *b
             break;
         case WEBSOCKET_EVENT_DATA:
             ESP_LOGV(TAG, "WebSocket data received");
+            if (unlikely(state >= STATE_WRITE_FLASH)) {
+                return;
+            }
             if (data->op_code == WS_TRANSPORT_OPCODES_TEXT) {
                 char *resp = strndup((char *)data->data_ptr, data->data_len);
                 ESP_LOGI(TAG, "received text data on WebSocket: %s", resp);
@@ -127,6 +130,7 @@ static void IRAM_ATTR cb_ws_event(const void *arg_evh, const esp_event_base_t *b
 
                 cJSON *json_nvs = cJSON_GetObjectItemCaseSensitive(cjson, "nvs");
                 if (cJSON_IsObject(json_nvs)) {
+                    state = STATE_WRITE_FLASH;
                     char *nvs = cJSON_Print(json_nvs);
                     esp_err_t ret = ESP_OK;
                     nvs_handle_t hdl_nvs;
@@ -347,6 +351,11 @@ static void IRAM_ATTR cb_ws_event(const void *arg_evh, const esp_event_base_t *b
 cleanup:
                 cJSON_Delete(cjson);
                 free(resp);
+            }
+            // if we arrive here in STATE_WRITE_FLASH something went wrong while writing to NVS
+            // restore state to stop ignoring WAS messages
+            if (state == STATE_WRITE_FLASH) {
+                state = STATE_READY;
             }
             break;
         case WEBSOCKET_EVENT_DISCONNECTED:

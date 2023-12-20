@@ -131,7 +131,7 @@ cleanup:
 
 void config_write(const char *data)
 {
-    deinit_was();
+    state = STATE_WRITE_FLASH;
     deinit_audio();
     deinit_hass();
 

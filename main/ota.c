@@ -274,6 +274,7 @@ err:
 
 void ota_start(char *url)
 {
+    state = STATE_WRITE_FLASH;
     reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
     if (lvgl_port_lock(lvgl_lock_timeout)) {
         lv_obj_add_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
@@ -288,7 +289,6 @@ void ota_start(char *url)
 
     deinit_audio();
     deinit_hass();
-    deinit_was();
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     xTaskCreate(&ota_task, "ota_task", 8192, url, 5, NULL);
@@ -296,6 +296,7 @@ void ota_start(char *url)
 
 void srmodels_ota_start(char *url)
 {
+    state = STATE_WRITE_FLASH;
     reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
     if (lvgl_port_lock(lvgl_lock_timeout)) {
         lv_obj_add_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
@@ -310,7 +311,6 @@ void srmodels_ota_start(char *url)
 
     deinit_audio();
     deinit_hass();
-    deinit_was();
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     xTaskCreate(&srmodels_ota_task, "srmodels_ota_task", 8192, url, 5, NULL);

@@ -13,6 +13,7 @@ enum willow_state {
     STATE_NVS_OK,
     STATE_CONFIG_OK,
     STATE_READY,
+    STATE_WRITE_FLASH,
     STATE_RESTARTING,
 };
 
