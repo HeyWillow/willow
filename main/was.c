@@ -8,6 +8,7 @@
 #include "esp_transport_ws.h"
 #include "esp_websocket_client.h"
 #include "lvgl.h"
+#include "model_path.h"
 #include "nvs_flash.h"
 
 #include "audio.h"
@@ -567,9 +568,18 @@ static void send_hello_goodbye(const char *type)
     cJSON *cjson = cJSON_CreateObject();
     cJSON *msg = cJSON_CreateObject();
     cJSON *mac_arr = cJSON_CreateArray();
+    cJSON *srmodels = cJSON_CreateArray();
 
     for (int i = 0; i < 6; i++) {
         cJSON_AddItemToArray(mac_arr, cJSON_CreateNumber(mac[i]));
+    }
+
+    srmodel_list_t *models = get_static_srmodels();
+    if (models != NULL) {
+        for (int i = 0; i < models->num; i++) {
+            cJSON *model = cJSON_CreateStringReference(models->model_name[i]);
+            cJSON_AddItemToArray(srmodels, model);
+        }
     }
 
     if (cJSON_AddStringToObject(msg, "hostname", hostname) == NULL) {
@@ -579,6 +589,9 @@ static void send_hello_goodbye(const char *type)
         goto cleanup;
     }
     if (!cJSON_AddItemToObjectCS(msg, "mac_addr", mac_arr)) {
+        goto cleanup;
+    }
+    if (!cJSON_AddItemToObjectCS(msg, "srmodels", srmodels)) {
         goto cleanup;
     }
     if (!cJSON_AddItemToObjectCS(cjson, type, msg)) {
