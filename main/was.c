@@ -24,9 +24,10 @@
 
 #define WAS_RECONNECT_TIMEOUT_MS 10 * 1000
 
+static SemaphoreHandle_t notify_mutex;
 static const char *TAG = "WILLOW/WAS";
 static esp_websocket_client_handle_t hdl_wc = NULL;
-static volatile struct notify_data *notify_active;
+static struct notify_data *notify_active;
 
 esp_netif_t *hdl_netif;
 
@@ -218,16 +219,20 @@ static void IRAM_ATTR cb_ws_event(const void *arg_evh, const esp_event_base_t *b
 
                             cJSON *cancel = cJSON_GetObjectItemCaseSensitive(data, "cancel");
                             if (cJSON_IsBool(cancel) && cJSON_IsTrue(cancel)) {
+                                xSemaphoreTake(notify_mutex, portMAX_DELAY);
                                 if (notify_active == NULL) {
                                     ESP_LOGW(TAG, "trying to cancel notify_task but notify_active is NULL");
+                                    xSemaphoreGive(notify_mutex);
                                     goto cleanup;
                                 }
                                 if (notify_active->id == nd->id) {
                                     ESP_LOGI(TAG, "cancel active notify_task with ID='%" PRIu64 "'", nd->id);
                                     notify_active->cancel = true;
+                                    xSemaphoreGive(notify_mutex);
                                     esp_audio_stop(hdl_ea, TERMINATION_TYPE_NOW);
                                     goto cleanup;
                                 }
+                                xSemaphoreGive(notify_mutex);
                             }
 
                             cJSON *audio_url = cJSON_GetObjectItemCaseSensitive(data, "audio_url");
@@ -383,6 +388,10 @@ esp_err_t init_was(void)
 {
     if (restarting) {
         return ESP_OK;
+    }
+
+    if (notify_mutex == NULL) {
+        notify_mutex = xSemaphoreCreateMutex();
     }
 
     const esp_websocket_client_config_t cfg_wc = {
@@ -644,7 +653,9 @@ void cb_btn_cancel_notify(lv_event_t *ev)
 {
     ESP_LOGD(TAG, "btn_cancel pressed");
     esp_audio_stop(hdl_ea, TERMINATION_TYPE_NOW);
+    xSemaphoreTake(notify_mutex, portMAX_DELAY);
     notify_active->cancel = true;
+    xSemaphoreGive(notify_mutex);
 }
 
 static void notify_task(void *data)
@@ -661,7 +672,9 @@ static void notify_task(void *data)
         goto out;
     }
 
+    xSemaphoreTake(notify_mutex, portMAX_DELAY);
     notify_active = nd;
+    xSemaphoreGive(notify_mutex);
 
     ESP_LOGI(TAG, "started notify task for notification with ID='%" PRIu64 "'", nd->id);
 
@@ -759,6 +772,8 @@ cleanup:
 
 skip_notify_done:
     free(nd);
+    xSemaphoreTake(notify_mutex, portMAX_DELAY);
     notify_active = NULL;
+    xSemaphoreGive(notify_mutex);
     vTaskDelete(NULL);
 }
