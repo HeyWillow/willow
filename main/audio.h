@@ -15,8 +15,8 @@ typedef enum {
 } q_msg;
 
 extern audio_rec_handle_t hdl_ar;
-extern volatile bool multiwake_won;
-extern volatile bool recording;
+extern _Atomic bool multiwake_won;
+extern _Atomic bool recording;
 extern esp_audio_handle_t hdl_ea;
 extern QueueHandle_t q_rec;
 extern struct willow_audio_response war;
