@@ -556,7 +556,6 @@ static esp_err_t hdl_ev_hs_to_api(http_stream_event_msg_t *msg)
             return ESP_OK;
 
         case HTTP_STREAM_ON_REQUEST:
-            esp_http_client_set_timeout_ms(http, HTTP_STREAM_TIMEOUT_MS_POST_REQUEST);
             wlen = sprintf(len_buf, "%x\r\n", msg->buffer_len);
             if (esp_http_client_write(http, len_buf, wlen) <= 0) {
                 return ESP_FAIL;
@@ -573,6 +572,7 @@ static esp_err_t hdl_ev_hs_to_api(http_stream_event_msg_t *msg)
 
         case HTTP_STREAM_POST_REQUEST:
             ESP_LOGI(TAG, "WIS HTTP client HTTP_STREAM_POST_REQUEST, write end chunked marker");
+            esp_http_client_set_timeout_ms(http, HTTP_STREAM_TIMEOUT_MS_POST_REQUEST);
             if (esp_http_client_write(http, "0\r\n\r\n", 5) <= 0) {
                 return ESP_FAIL;
             }
