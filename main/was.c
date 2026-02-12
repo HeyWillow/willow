@@ -771,9 +771,9 @@ cleanup:
     cJSON_Delete(cjson);
 
 skip_notify_done:
-    free(nd);
     xSemaphoreTake(notify_mutex, portMAX_DELAY);
     notify_active = NULL;
     xSemaphoreGive(notify_mutex);
+    free(nd);
     vTaskDelete(NULL);
 }
