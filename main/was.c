@@ -654,7 +654,9 @@ void cb_btn_cancel_notify(lv_event_t *ev)
     ESP_LOGD(TAG, "btn_cancel pressed");
     esp_audio_stop(hdl_ea, TERMINATION_TYPE_NOW);
     xSemaphoreTake(notify_mutex, portMAX_DELAY);
-    notify_active->cancel = true;
+    if (notify_active != NULL) {
+        notify_active->cancel = true;
+    }
     xSemaphoreGive(notify_mutex);
 }
 
