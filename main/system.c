@@ -20,7 +20,7 @@ static const char *willow_hw_t[WILLOW_HW_MAX] = {
     [WILLOW_HW_ESP32_S3_BOX_3] = "ESP32-S3-BOX-3",
 };
 
-volatile bool restarting = false;
+_Atomic bool restarting = false;
 
 const char *str_hw_type(int id)
 {

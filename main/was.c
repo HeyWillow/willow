@@ -26,7 +26,7 @@
 
 static const char *TAG = "WILLOW/WAS";
 static esp_websocket_client_handle_t hdl_wc = NULL;
-static volatile struct notify_data *notify_active;
+static _Atomic struct notify_data *notify_active;
 
 esp_netif_t *hdl_netif;
 
