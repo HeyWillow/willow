@@ -604,7 +604,7 @@ static esp_err_t hdl_ev_hs_to_api(http_stream_event_msg_t *msg)
             // Allocate memory for response. Should be enough?
             char *buf = calloc(2048, sizeof(char));
             assert(buf);
-            int read_len = esp_http_client_read(http, buf, 2048);
+            int read_len = esp_http_client_read(http, buf, 2048 - 1);
             if (read_len <= 0) {
                 free(buf);
                 return ESP_FAIL;
