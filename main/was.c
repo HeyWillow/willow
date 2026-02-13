@@ -46,8 +46,7 @@ struct notify_data {
 static void notify_task(void *data);
 static void send_hello_goodbye(const char *type);
 
-static void IRAM_ATTR cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, const int32_t id_ev,
-                                  const void *ev_data)
+static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, const int32_t id_ev, const void *ev_data)
 {
     esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)ev_data;
     // components/esp_websocket_client/include/esp_websocket_client.h - enum esp_websocket_event_id_t
