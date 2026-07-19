@@ -242,7 +242,7 @@ esp_err_t init_wifi(const char *psk, const char *ssid)
     EventBits_t evb = xEventGroupWaitBits(hdl_evg, WIFI_BIT_CONNECTED, pdFALSE, pdFALSE, portMAX_DELAY);
     (void)evb;
 
-    vEventGroupDelete(hdl_evg);
+    // hdl_evg must outlive the registered IP event handler.
     start_sntp();
 
     ret = esp_wifi_set_ps(WIFI_PS_NONE);
