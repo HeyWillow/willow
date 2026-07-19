@@ -256,7 +256,6 @@ static void init_esp_audio(void)
     cfg_hs.event_handle = hdl_ev_hs_esp_audio;
 
     audio_element_handle_t hdl_ae_hs = http_stream_init(&cfg_hs);
-    audio_element_set_event_callback(hdl_ea, cb_ae_hs, (void *)WILLOW_HS_ESP_AUDIO);
 
     ret = esp_audio_input_stream_add(hdl_ea, hdl_ae_hs);
     if (ret != ESP_OK) {
