@@ -29,6 +29,7 @@ void init_logging(void)
     esp_log_level_set("WILLOW/OPENHAB", WILLOW_LOG_LEVEL);
     esp_log_level_set("WILLOW/OTA", WILLOW_LOG_LEVEL);
     esp_log_level_set("WILLOW/REST", WILLOW_LOG_LEVEL);
+    esp_log_level_set("WILLOW/RUST", WILLOW_LOG_LEVEL);
     esp_log_level_set("WILLOW/SYSTEM", WILLOW_LOG_LEVEL);
     esp_log_level_set("WILLOW/TIMER", WILLOW_LOG_LEVEL);
     esp_log_level_set("WILLOW/UI", WILLOW_LOG_LEVEL);

@@ -1,0 +1,33 @@
+[package]
+name = "willow"
+version = "0.5.0-alpha.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+build = "build.rs"
+
+[[bin]]
+name = "willow"
+harness = false
+
+[dependencies]
+esp-idf-svc = { version = "=0.52.1", default-features = false, features = ["std"] }
+esp-idf-sys = "=0.37.2"
+log = "0.4"
+
+[build-dependencies]
+embuild = "=0.33.1"
+
+[package.metadata.esp-idf-sys]
+esp_idf_sdkconfig = "sdkconfig"
+esp_idf_sdkconfig_defaults = ["sdkconfig.defaults"]
+esp_idf_tools_install_dir = "fromenv"
+esp_idf_version = "tag:v5.3.4"
+esp_idf_components = ["main"]
+
+[[package.metadata.esp-idf-sys.extra_components]]
+component_dirs = ["deps/esp-adf/components"]
+
+[profile.release]
+debug = true
+opt-level = "s"
