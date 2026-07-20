@@ -1,7 +1,8 @@
-#include <errno.h>
+#include <limits.h>
+#include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
@@ -13,6 +14,7 @@
 #include "audio.h"
 #include "config.h"
 #include "display.h"
+#include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
@@ -24,51 +26,14 @@
 static const char *TAG = "WILLOW/CONFIG";
 
 bool config_valid = false;
-cJSON *wc = NULL; // TODO: cJSON_Delete() after all config_get_* calls
 
-static char *config_read(void)
-{
-    char *config = NULL;
-
-    struct stat fs;
-    if (stat(CONFIG_PATH, &fs)) {
-        if (errno == ENOENT) {
-            ESP_LOGI(TAG, "%s does not exist, will be requested from WAS", CONFIG_PATH);
-        } else {
-            ESP_LOGE(TAG, "failed to get file status for %s: %s", CONFIG_PATH, strerror(errno));
-        }
-        return NULL;
-    }
-
-    ESP_LOGI(TAG, "opening %s", CONFIG_PATH);
-    FILE *f = fopen(CONFIG_PATH, "r");
-    if (f == NULL) {
-        ESP_LOGE(TAG, "failed to open %s", CONFIG_PATH);
-        goto close;
-    }
-
-    ESP_LOGI(TAG, "config file size: %ld", fs.st_size);
-
-    config = calloc(fs.st_size + 1, sizeof(char));
-    size_t rlen = fread(config, 1, fs.st_size, f);
-    ESP_LOGI(TAG, "fread: %d", rlen);
-    config[fs.st_size] = '\0';
-    ESP_LOGI(TAG, "config file content: %s", config);
-close:
-    fclose(f);
-
-    return config;
-}
+// Rust owns the parsed, typed configuration. These calls only adapt it to the
+// existing C getter API while the remaining consumers are migrated.
 
 bool config_get_bool(char *key, const bool default_value)
 {
-    bool ret = default_value;
-    cJSON *val = cJSON_GetObjectItemCaseSensitive(wc, key);
-    if (val != NULL && cJSON_IsBool(val)) {
-        ret = cJSON_IsTrue(val) ? true : false;
-    } else {
-        ret = default_value;
-    }
+    int8_t value = rust_config_get_bool(key);
+    bool ret = value < 0 ? default_value : value != 0;
     ESP_LOGD(TAG, "config_get_bool(%s): %s", key, ret ? "true" : "false");
     return ret;
 }
@@ -76,56 +41,31 @@ bool config_get_bool(char *key, const bool default_value)
 char *config_get_char(const char *key, const char *default_value)
 {
     char *ret = NULL;
-    cJSON *val = cJSON_GetObjectItemCaseSensitive(wc, key);
-    if (val != NULL && cJSON_IsString(val) && val->valuestring != NULL) {
-        ret = strndup(val->valuestring, strlen(val->valuestring));
+    intptr_t len = rust_config_get_char_len(key);
+    if (len >= 0) {
+        ret = calloc((size_t)len + 1, sizeof(char));
+        if (ret != NULL && !rust_config_copy_char(key, ret, (size_t)len + 1)) {
+            free(ret);
+            ret = NULL;
+        }
     } else {
         ret = default_value == NULL ? NULL : strndup(default_value, strlen(default_value));
     }
-    ESP_LOGD(TAG, "config_get_char(%s): %s", key, ret);
+    ESP_LOGD(TAG, "config_get_char(%s)", key);
     return ret;
 }
 
 int config_get_int(char *key, const int default_value)
 {
-    int ret = -1;
-    cJSON *val = cJSON_GetObjectItemCaseSensitive(wc, key);
-    if (cJSON_IsNumber(val)) {
-        ret = val->valueint;
-    } else {
-        ret = default_value;
-    }
+    int64_t value = rust_config_get_int(key);
+    int ret = value < 0 || value > INT_MAX ? default_value : (int)value;
     ESP_LOGD(TAG, "config_get_int(%s): %d", key, ret);
     return ret;
 }
 
 void config_parse(void)
 {
-    char *config = config_read();
-    char *json = NULL;
-
-    if (config == NULL) {
-        return;
-    }
-
-    wc = cJSON_Parse(config);
-    if (wc == NULL) {
-        const char *eptr = cJSON_GetErrorPtr();
-        if (eptr != NULL) {
-            ESP_LOGE(TAG, "error parsing config file: %s\n", eptr);
-            goto cleanup;
-        }
-    }
-
-    config_valid = true;
-
-    json = cJSON_Print(wc);
-    ESP_LOGI(TAG, "parsed config file:");
-    printf("%s\n", json);
-    cJSON_free(json);
-
-cleanup:
-    free(config);
+    config_valid = rust_config_load();
 }
 
 void config_write(const char *data)

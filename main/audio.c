@@ -4,6 +4,7 @@
 #include "audio_pipeline.h"
 #include "audio_thread.h"
 #include "board.h"
+#include "cJSON.h"
 #include "esp_check.h"
 #include "esp_decoder.h"
 #include "esp_http_client.h"

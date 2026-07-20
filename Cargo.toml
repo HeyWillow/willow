@@ -14,6 +14,8 @@ harness = false
 esp-idf-svc = { version = "=0.52.1", default-features = false, features = ["std"] }
 esp-idf-sys = "=0.37.2"
 log = "0.4"
+serde_json = { version = "1", default-features = false, features = ["alloc"] }
+willow-schema = { git = "https://github.com/HeyWillow/willow-schema.git", rev = "1af0ddea34b82044c5879531cc4859a8a6d8b32a" }
 
 [build-dependencies]
 embuild = "=0.33.1"
