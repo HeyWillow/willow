@@ -25,9 +25,23 @@ idf_component_register(
         spiffs
 )
 
+if(NOT DEFINED ENV{WILLOW_CARGO_FIRST})
+    message(FATAL_ERROR "Willow firmware must be built through Cargo")
+endif()
+
+if(DEFINED ENV{WILLOW_CARGO_FIRST})
+    target_compile_definitions(${COMPONENT_LIB} PRIVATE WILLOW_CARGO_FIRST)
+
+    if(DEFINED ENV{WILLOW_VERSION})
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE WILLOW_USER_AGENT="Willow/$ENV{WILLOW_VERSION}")
+    else()
+        target_compile_definitions(${COMPONENT_LIB} PRIVATE WILLOW_USER_AGENT="Willow/0.1")
+    endif()
+endif()
+
 spiffs_create_partition_image(user ../spiffs/user FLASH_IN_PROJECT)
 
-string(APPEND CMAKE_C_FLAGS -Werror)
+string(APPEND CMAKE_C_FLAGS " -Werror")
 
 # sdkconfig sanity checks
 if($ENV{WILLOW_SDKCONFIG_SANITY_CHECKS})

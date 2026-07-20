@@ -14,6 +14,17 @@ export DIST_FILE="build/${dist_filename:-willow-dist.bin}"
 
 export ADF_PATH="$WILLOW_PATH/deps/esp-adf"
 
+export CARGO_HOME="$WILLOW_PATH/deps/cargo"
+export RUSTUP_HOME="$WILLOW_PATH/deps/rustup"
+export PATH="$CARGO_HOME/bin:$PATH"
+
+RUST_STABLE_VERSION="1.88.0"
+RUST_HOST_TARGET="x86_64-unknown-linux-gnu"
+ESP_RUST_TOOLCHAIN_VERSION="1.88.0.0"
+ESPUP_VERSION="0.17.1"
+LDPROXY_VERSION="0.3.5"
+RUST_EXPORT_FILE="$WILLOW_PATH/deps/export-esp.sh"
+
 # Number of loops for torture test
 TORTURE_LOOPS=300
 # Delay in between loops
@@ -117,6 +128,117 @@ check_deps() {
     fi
 }
 
+activate_rust() {
+    check_container
+
+    if [ -r "$RUST_EXPORT_FILE" ]; then
+        . "$RUST_EXPORT_FILE"
+    fi
+}
+
+ensure_rust() {
+    check_container
+
+    mkdir -p "$CARGO_HOME" "$RUSTUP_HOME"
+
+    if [ ! -x "$CARGO_HOME/bin/cargo" ]; then
+        echo "Installing Rust $RUST_STABLE_VERSION into deps"
+        curl --proto '=https' --tlsv1.2 -fsS https://sh.rustup.rs \
+            -o "$WILLOW_PATH/deps/rustup-init.sh"
+        sh "$WILLOW_PATH/deps/rustup-init.sh" \
+            -y --no-modify-path --profile minimal --default-toolchain "$RUST_STABLE_VERSION"
+    fi
+
+    if [ ! -x "$CARGO_HOME/bin/espup" ]; then
+        "$CARGO_HOME/bin/cargo" +"$RUST_STABLE_VERSION" install --locked \
+            --target "$RUST_HOST_TARGET" --version "$ESPUP_VERSION" espup
+    fi
+
+    if ! "$CARGO_HOME/bin/rustup" toolchain list | grep -q '^esp' || [ ! -r "$RUST_EXPORT_FILE" ]; then
+        "$CARGO_HOME/bin/espup" install \
+            --default-host "$RUST_HOST_TARGET" \
+            --export-file "$RUST_EXPORT_FILE" \
+            --name esp \
+            --std \
+            --targets esp32s3 \
+            --toolchain-version "$ESP_RUST_TOOLCHAIN_VERSION" \
+            --skip-version-parse
+    fi
+
+    if [ ! -x "$CARGO_HOME/bin/ldproxy" ]; then
+        "$CARGO_HOME/bin/cargo" +"$RUST_STABLE_VERSION" install --locked \
+            --target "$RUST_HOST_TARGET" --version "$LDPROXY_VERSION" ldproxy
+    fi
+
+    activate_rust
+}
+
+stage_cargo_build() {
+    check_container
+
+    cargo_release="$WILLOW_PATH/target/xtensa-esp32s3-espidf/release"
+    cargo_elf="$cargo_release/willow"
+    idf_build_dir=""
+
+    for candidate in "$cargo_release"/build/esp-idf-sys-*/out/build; do
+        if [ -d "$candidate" ]; then
+            idf_build_dir="$candidate"
+        fi
+    done
+
+    if [ ! -r "$cargo_elf" ] || [ ! -r "$cargo_release/bootloader.bin" ] || \
+        [ ! -r "$cargo_release/partition-table.bin" ] || [ ! -r "$idf_build_dir/ota_data_initial.bin" ] || \
+        [ ! -r "$idf_build_dir/srmodels/srmodels.bin" ] || [ ! -r "$idf_build_dir/user.bin" ]; then
+        echo "Cargo build completed but its ESP-IDF images could not be found"
+        exit 1
+    fi
+
+    mkdir -p build/bootloader build/partition_table build/srmodels
+    cp "$cargo_elf" build/willow.elf
+    cp "$cargo_release/bootloader.bin" build/bootloader/bootloader.bin
+    cp "$cargo_release/partition-table.bin" build/partition_table/partition-table.bin
+    cp "$idf_build_dir/ota_data_initial.bin" build/ota_data_initial.bin
+    cp "$idf_build_dir/srmodels/srmodels.bin" build/srmodels/srmodels.bin
+    cp "$idf_build_dir/user.bin" build/user.bin
+
+    esptool.py --chip "$PLATFORM" elf2image \
+        --flash_mode dio --flash_freq 80m --flash_size 16MB \
+        -o build/willow.bin build/willow.elf
+
+    app_size=$(stat -c %s build/willow.bin)
+    if [ "$app_size" -gt $((0x300000)) ]; then
+        echo "Application image is larger than its 3 MiB OTA partition"
+        exit 1
+    fi
+
+    printf '%s\n' \
+        '--flash_mode dio' \
+        '--flash_freq 80m' \
+        '--flash_size 16MB' \
+        '0x0 bootloader/bootloader.bin' \
+        '0x8000 partition_table/partition-table.bin' \
+        '0x2D000 ota_data_initial.bin' \
+        '0x30000 willow.bin' \
+        '0x630000 srmodels/srmodels.bin' \
+        '0xC30000 user.bin' > build/flash_args
+
+    printf '%s\n' \
+        '--flash_mode dio' \
+        '--flash_freq 80m' \
+        '--flash_size 16MB' \
+        '0x30000 willow.bin' > build/flash_app_args
+}
+
+clean_cargo_build() {
+    check_container
+
+    if [ -x "$CARGO_HOME/bin/cargo" ]; then
+        activate_rust
+        "$CARGO_HOME/bin/cargo" +esp clean
+    fi
+    rm -rf "$WILLOW_PATH/build"
+}
+
 generate_nvs() {
     SSID=$(grep CONFIG_WIFI_SSID sdkconfig | cut -d'=' -f2 | tr -d '"')
     PASSWORD=$(grep CONFIG_WIFI_PASSWORD sdkconfig | cut -d'=' -f2 | tr -d '"')
@@ -145,7 +267,7 @@ install() {
     git submodule update --init components/esp-adf-libs
 
     cd $WILLOW_PATH
-    idf.py set-target "$PLATFORM"
+    WILLOW_CARGO_FIRST=1 idf.py set-target "$PLATFORM"
 }
 
 destroy() {
@@ -188,31 +310,33 @@ case $1 in
 config)
     check_container
     check_deps
-    idf.py menuconfig
+    WILLOW_CARGO_FIRST=1 idf.py menuconfig
 ;;
 
 clean)
     check_container
     check_deps
-    idf.py clean
+    clean_cargo_build
 ;;
 
 fullclean)
     check_container
     check_deps
-    idf.py fullclean
+    clean_cargo_build
 ;;
 
 build)
     check_container
     check_deps
+    ensure_rust
     if [ $2 ]; then
         echo "Adding timestamp to dev build"
         TS=$(date '+%d-%m-%Y_%H:%M:%S')
         WILLOW_VERSION+="_$TS"
 
     fi
-    WILLOW_SDKCONFIG_SANITY_CHECKS=1 idf.py build
+    WILLOW_SDKCONFIG_SANITY_CHECKS=1 "$CARGO_HOME/bin/cargo" +esp build --release --locked
+    stage_cargo_build
 ;;
 
 build-docker|docker-build)

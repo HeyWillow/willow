@@ -1,0 +1,62 @@
+[package]
+name = "willow"
+version = "0.5.0-alpha.0"
+edition = "2024"
+rust-version = "1.88"
+publish = false
+build = "build.rs"
+
+[[bin]]
+name = "willow"
+harness = false
+
+[dependencies]
+esp-idf-svc = { version = "=0.52.1", default-features = false, features = ["std"] }
+esp-idf-sys = "=0.37.2"
+log = "0.4"
+
+[build-dependencies]
+embuild = "=0.33.1"
+
+[package.metadata.esp-idf-sys]
+esp_idf_sdkconfig = "sdkconfig"
+esp_idf_sdkconfig_defaults = ["sdkconfig.defaults"]
+esp_idf_tools_install_dir = "fromenv"
+esp_idf_version = "tag:v5.3.4"
+esp_idf_components = ["main"]
+
+[[package.metadata.esp-idf-sys.extra_components]]
+# Keep these explicit and lexicographically sorted. esp-idf-sys 0.37.2 expands a
+# parent directory with an unsorted read_dir(), which makes ESP-IDF's
+# order-sensitive manifest hash alternate between otherwise identical builds.
+component_dirs = [
+  "deps/esp-adf/components/adf_utils",
+  "deps/esp-adf/components/audio_board",
+  "deps/esp-adf/components/audio_hal",
+  "deps/esp-adf/components/audio_mixer",
+  "deps/esp-adf/components/audio_pipeline",
+  "deps/esp-adf/components/audio_recorder",
+  "deps/esp-adf/components/audio_sal",
+  "deps/esp-adf/components/audio_stream",
+  "deps/esp-adf/components/battery_service",
+  "deps/esp-adf/components/bluetooth_service",
+  "deps/esp-adf/components/clouds",
+  "deps/esp-adf/components/coredump_upload_service",
+  "deps/esp-adf/components/display_service",
+  "deps/esp-adf/components/dueros_service",
+  "deps/esp-adf/components/esp-adf-libs",
+  "deps/esp-adf/components/esp_actions",
+  "deps/esp-adf/components/esp_codec_dev",
+  "deps/esp-adf/components/esp_dispatcher",
+  "deps/esp-adf/components/esp_event_cast",
+  "deps/esp-adf/components/esp_peripherals",
+  "deps/esp-adf/components/input_key_service",
+  "deps/esp-adf/components/ota_service",
+  "deps/esp-adf/components/playlist",
+  "deps/esp-adf/components/tone_partition",
+  "deps/esp-adf/components/wifi_service",
+]
+
+[profile.release]
+debug = true
+opt-level = "s"

@@ -1,5 +1,6 @@
 .DS_Store
 .env
+.tmp
 .vscode
 build
 dependencies.lock

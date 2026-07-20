@@ -13,6 +13,7 @@
 #include "display.h"
 #include "input.h"
 #include "log.h"
+#include "main.h"
 #include "network.h"
 #include "shared.h"
 #include "slvgl.h"
@@ -66,7 +67,7 @@ static esp_err_t init_spiffs_user(void)
     return ret;
 }
 
-void app_main(void)
+void willow_init(void)
 {
     state = STATE_INIT;
     esp_err_t err;
@@ -189,22 +190,29 @@ err_nvs:
 #ifdef CONFIG_WILLOW_DEBUG_RUNTIME_STATS
     xTaskCreate(&task_debug_runtime_stats, "dbg_runtime_stats", 4 * 1024, NULL, 0, NULL);
 #endif
+}
 
-    while (true) {
+void willow_main_loop_iteration(void)
+{
 #ifdef CONFIG_WILLOW_DEBUG_MEM
-        printf("MALLOC_CAP_INTERNAL:\n");
-        heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
-        printf("MALLOC_CAP_SPIRAM:\n");
-        heap_caps_print_heap_info(MALLOC_CAP_SPIRAM);
+    printf("MALLOC_CAP_INTERNAL:\n");
+    heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
+    printf("MALLOC_CAP_SPIRAM:\n");
+    heap_caps_print_heap_info(MALLOC_CAP_SPIRAM);
 #endif
 #ifdef CONFIG_WILLOW_DEBUG_TASKS
-        char buf[128];
-        vTaskList(buf);
-        printf("%s\n", buf);
+    char buf[128];
+    vTaskList(buf);
+    printf("%s\n", buf);
 #endif
 #ifdef CONFIG_WILLOW_DEBUG_TIMERS
-        (esp_timer_dump(stdout));
+    (esp_timer_dump(stdout));
 #endif
-        vTaskDelay(5000 / portTICK_PERIOD_MS);
-    }
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
 }
+
+#ifdef WILLOW_CARGO_FIRST
+// esp-idf-sys needs an app_main symbol for its intermediate C link. The final
+// Cargo link replaces this weak stub with Rust's strong entry point.
+void __attribute__((weak)) app_main(void) {}
+#endif

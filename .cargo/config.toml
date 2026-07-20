@@ -1,0 +1,28 @@
+[build]
+target = "xtensa-esp32s3-espidf"
+
+[target.'cfg(target_os = "espidf")']
+linker = "ldproxy"
+rustflags = ["--cfg", "espidf_time64"]
+
+[unstable]
+build-std = ["std", "panic_abort"]
+
+[resolver]
+incompatible-rust-versions = "fallback"
+
+[env]
+CARGO_WORKSPACE_DIR = { value = "", relative = true }
+ESP_IDF_GLOB_WILLOW_BASE = { value = "", relative = true }
+ESP_IDF_GLOB_WILLOW_EXCLUDE_BUILD = "!build/**"
+ESP_IDF_GLOB_WILLOW_EXCLUDE_DEPS = "!deps/**"
+ESP_IDF_GLOB_WILLOW_EXCLUDE_GIT = "!.git/**"
+ESP_IDF_GLOB_WILLOW_EXCLUDE_TARGET = "!target/**"
+ESP_IDF_GLOB_WILLOW_EXCLUDE_TMP = "!.tmp/**"
+ESP_IDF_GLOB_WILLOW_MAIN = "main/**/*.*"
+ESP_IDF_GLOB_WILLOW_PARTITIONS = "partitions_willow.csv"
+ESP_IDF_GLOB_WILLOW_SPIFFS = "spiffs/**/*.*"
+ESP_IDF_TOOLS_INSTALL_DIR = "fromenv"
+ESP_IDF_VERSION = "tag:v5.3.4"
+MCU = "esp32s3"
+WILLOW_CARGO_FIRST = "1"
