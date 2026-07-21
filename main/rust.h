@@ -16,6 +16,9 @@ bool rust_config_write(const char *data);
 esp_err_t rust_ethernet_init(void);
 void rust_get_mac_address(void);
 bool rust_nvs_apply(const char *data);
+bool rust_nvs_read_was_url(char *output, size_t output_len);
+bool rust_nvs_read_wifi(char *psk, size_t psk_len, char *ssid,
+                        size_t ssid_len);
 bool rust_state_is_nvs_ok(void);
 bool rust_state_is_restarting(void);
 void rust_state_mark_nvs_ok(void);

@@ -5,7 +5,6 @@
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
 #include "lvgl.h"
-#include "nvs.h"
 #include "periph_spiffs.h"
 #include "sdkconfig.h"
 
@@ -65,8 +64,6 @@ static esp_err_t init_spiffs_user(void)
 void willow_init(void)
 {
     esp_err_t err;
-    nvs_handle_t hdl_nvs;
-    size_t sz;
 
     esp_periph_config_t pcfg = DEFAULT_ESP_PERIPH_SET_CONFIG();
     hdl_pset = esp_periph_set_init(&pcfg);
@@ -89,25 +86,9 @@ void willow_init(void)
     }
     ESP_ERROR_CHECK(rust_ethernet_init());
 #else
-    err = nvs_open("WIFI", NVS_READONLY, &hdl_nvs);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "failed to open NVS namespace WIFI: %s", esp_err_to_name(err));
-        goto err_nvs;
-    }
-
     char psk[64];
-    sz = sizeof(psk);
-    err = nvs_get_str(hdl_nvs, "PSK", psk, &sz);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "failed to get PSK from NVS namespace WIFI: %s", esp_err_to_name(err));
-        goto err_nvs;
-    }
-
     char ssid[33];
-    sz = sizeof(ssid);
-    err = nvs_get_str(hdl_nvs, "SSID", ssid, &sz);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "failed to get PSK from NVS namespace WIFI: %s", esp_err_to_name(err));
+    if (!rust_nvs_read_wifi(psk, sizeof(psk), ssid, sizeof(ssid))) {
         goto err_nvs;
     }
     if (lvgl_port_lock(lvgl_lock_timeout)) {
@@ -120,12 +101,6 @@ void willow_init(void)
     (void)rust_wifi_init(psk, ssid, &hdl_netif);
 #endif
 
-    err = nvs_open("WAS", NVS_READONLY, &hdl_nvs);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "failed to open NVS namespace WAS: %s", esp_err_to_name(err));
-        goto err_nvs;
-    }
-
 #ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
     // initialize mbedtls PSA library after wifi to have entropy
     psa_status_t status = psa_crypto_init();
@@ -134,10 +109,7 @@ void willow_init(void)
     }
 #endif
 
-    sz = sizeof(was_url);
-    err = nvs_get_str(hdl_nvs, "URL", was_url, &sz);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "failed to get WASL URL from NVS namespace WAS: %s", esp_err_to_name(err));
+    if (!rust_nvs_read_was_url(was_url, sizeof(was_url))) {
         goto err_nvs;
     }
     rust_state_mark_nvs_ok();
