@@ -13,6 +13,8 @@ use esp_idf_sys::EspError;
 use log::error;
 use willow_schema::nvs::v1::{Config, Was, Wifi, WifiPsk, WifiPskError, WifiSsid, WifiSsidError};
 
+use crate::state;
+
 const APPLY_LOG_TARGET: &str = "WILLOW/WAS";
 const READ_LOG_TARGET: &str = "WILLOW/MAIN";
 
@@ -183,7 +185,9 @@ pub fn init() -> Result<(), EspError> {
 ///
 /// Rust owns the NVS partition and validates the namespace through the shared
 /// schema type. The URL is copied only because the remaining C WAS client
-/// still consumes its existing global buffer.
+/// still consumes its existing global buffer. A successful copy completes the
+/// existing boot-time NVS checks, so Rust advances the startup state here
+/// instead of requiring a separate C-to-Rust call.
 ///
 /// # Safety
 ///
@@ -196,6 +200,8 @@ pub unsafe extern "C" fn rust_nvs_read_was_url(output: *mut c_char, output_len: 
         error!(target: READ_LOG_TARGET, "failed to read WAS NVS configuration: {error}");
         return false;
     }
+
+    state::mark_nvs_ok();
 
     true
 }

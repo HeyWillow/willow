@@ -21,7 +21,6 @@ bool rust_nvs_read_wifi(char *psk, size_t psk_len, char *ssid,
                         size_t ssid_len);
 bool rust_state_is_nvs_ok(void);
 bool rust_state_is_restarting(void);
-void rust_state_mark_nvs_ok(void);
 void rust_state_mark_restarting(void);
 esp_err_t rust_wifi_init(const char *psk, const char *ssid,
                          esp_netif_t **network_interface);

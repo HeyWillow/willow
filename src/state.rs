@@ -54,8 +54,7 @@ pub(crate) fn mark_init() {
 }
 
 /// Records that startup successfully loaded the required NVS values.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_state_mark_nvs_ok() {
+pub(crate) fn mark_nvs_ok() {
     STATE.store(State::NvsOk as u8, Ordering::SeqCst);
 }
 

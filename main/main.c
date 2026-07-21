@@ -112,7 +112,6 @@ void willow_init(void)
     if (!rust_nvs_read_was_url(was_url, sizeof(was_url))) {
         goto err_nvs;
     }
-    rust_state_mark_nvs_ok();
     err = init_was();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to initialize Willow Application Server connection");
