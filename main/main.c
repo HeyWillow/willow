@@ -82,7 +82,7 @@ err_nvs:
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_ui_touch_init(MSG_STOP));
 
 #ifndef CONFIG_WILLOW_ETHERNET
-    get_mac_address(); // should be on wifi by now; print the MAC
+    rust_get_mac_address(); // should be on wifi by now; print the MAC
 #endif
 
     const esp_app_desc_t *app_desc = esp_app_get_description();

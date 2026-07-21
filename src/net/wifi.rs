@@ -1,19 +1,20 @@
-//! ESP-IDF Wi-Fi event callbacks used by the remaining C initialization.
+//! ESP-IDF Wi-Fi operations migrated from the remaining C initialization.
 //!
 //! C still creates the Wi-Fi event group and registers these callbacks. The IP
 //! callback receives that event group as its opaque argument. Callback logic
-//! stays entirely in Rust and calls only ESP-IDF through `esp-idf-sys`; it does
-//! not call back into Willow's C implementation.
+//! and MAC address retrieval stay entirely in Rust and call only ESP-IDF
+//! through `esp-idf-sys`; they do not call back into Willow's C implementation.
 
 use core::{ffi::c_void, net::Ipv4Addr};
 use std::{borrow::Cow, ffi::CStr};
 
 use esp_idf_sys::{
-    EventGroupDef_t, esp_event_base_t, esp_wifi_connect, ip_event_got_ip_t,
+    EventGroupDef_t, esp_event_base_t, esp_wifi_connect, esp_wifi_get_mac, ip_event_got_ip_t,
     ip_event_t_IP_EVENT_STA_GOT_IP, wifi_event_sta_connected_t, wifi_event_sta_disconnected_t,
     wifi_event_t_WIFI_EVENT_STA_CONNECTED as WIFI_EVENT_STA_CONNECTED,
     wifi_event_t_WIFI_EVENT_STA_DISCONNECTED as WIFI_EVENT_STA_DISCONNECTED,
-    wifi_event_t_WIFI_EVENT_STA_START as WIFI_EVENT_STA_START, xEventGroupSetBits,
+    wifi_event_t_WIFI_EVENT_STA_START as WIFI_EVENT_STA_START,
+    wifi_interface_t_WIFI_IF_STA as WIFI_IF_STA, xEventGroupSetBits,
 };
 use log::{error, info};
 
@@ -114,6 +115,20 @@ fn disconnect_reason_name(reason: u8) -> &'static str {
         _ => None,
     };
     name.copied().unwrap_or("UNKNOWN")
+}
+
+/// Reads and logs the station MAC address through ESP-IDF.
+pub(crate) fn log_mac_address() {
+    let mut address = [0; 6];
+    let _ = unsafe { esp_wifi_get_mac(WIFI_IF_STA, address.as_mut_ptr()) };
+    let [a, b, c, d, e, f] = address;
+    info!(target: LOG_TARGET, "MAC address: {a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}");
+}
+
+/// Compatibility entry point for the remaining C startup path.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_get_mac_address() {
+    log_mac_address();
 }
 
 /// Handles the ESP-IDF station-address event and releases C's connection
