@@ -4,16 +4,19 @@ mod config;
 mod display;
 mod ffi;
 mod i2c;
+mod logging;
 mod state;
 mod ui;
 
 fn main() {
     esp_idf_sys::link_patches();
-    esp_idf_svc::log::EspLogger::initialize_default();
+    let log_filter = logging::initialize();
 
     log::info!(target: "WILLOW/RUST", "entered Rust main()");
 
     state::mark_init();
+    logging::apply_policy(log_filter).expect("failed to configure logging");
+    log::info!(target: "WILLOW/MAIN", "Starting up! Please wait...");
 
     if let Err(error) = audio::initialize_recorder_queue() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize recorder queue: {error}");

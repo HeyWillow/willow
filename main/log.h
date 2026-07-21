@@ -1,1 +1,0 @@
-void init_logging(void);
