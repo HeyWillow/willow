@@ -1,6 +1,5 @@
 #include <stdio.h>
 
-#include "esp_event.h"
 #include "esp_log.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
@@ -43,19 +42,9 @@ static void set_hw_type(void)
     ESP_LOGD(TAG, "hardware type %d (%s)", hw_type, str_hw_type(hw_type));
 }
 
-static esp_err_t init_ev_loop()
-{
-    esp_err_t ret = esp_event_loop_create_default();
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "failed to initialize default event loop: %s", esp_err_to_name(ret));
-    }
-    return ret;
-}
-
 void init_system(void)
 {
     set_hw_type();
-    ESP_ERROR_CHECK(init_ev_loop());
 }
 
 void restart_delayed(void)
