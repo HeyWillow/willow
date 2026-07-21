@@ -4,7 +4,6 @@
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
 #include "nvs_flash.h"
-#include "periph_spiffs.h"
 #include "sdkconfig.h"
 
 #include "audio.h"
@@ -28,38 +27,12 @@
 
 #define DEFAULT_WIS_URL "https://infer.tovera.io/api/willow"
 
-#define I2S_PORT       I2S_NUM_0
-#define PARTLABEL_USER "user"
+#define I2S_PORT I2S_NUM_0
 
 char was_url[2048];
 static const char *TAG = "WILLOW/MAIN";
 
 esp_periph_set_handle_t hdl_pset;
-
-static esp_err_t init_spiffs_user(void)
-{
-    esp_err_t ret = ESP_OK;
-    periph_spiffs_cfg_t pcfg_spiffs_user = {
-        .format_if_mount_failed = false,
-        .max_files = 5,
-        .partition_label = PARTLABEL_USER,
-        .root = "/spiffs/user",
-    };
-    esp_periph_handle_t phdl_spiffs_user = periph_spiffs_init(&pcfg_spiffs_user);
-    ret = esp_periph_start(hdl_pset, phdl_spiffs_user);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "failed to start spiffs user peripheral: %s", esp_err_to_name(ret));
-        return ret;
-    }
-
-    while (!periph_spiffs_is_mounted(phdl_spiffs_user)) {
-        ESP_LOGI(TAG, "Waiting on SPIFFS mount...");
-        vTaskDelay(500 / portTICK_PERIOD_MS);
-    }
-    ESP_LOGI(TAG, "SPIFFS mounted");
-
-    return ret;
-}
 
 void willow_init(void)
 {
@@ -69,7 +42,11 @@ void willow_init(void)
     hdl_pset = esp_periph_set_init(&pcfg);
 
     init_system();
-    init_spiffs_user();
+    err = rust_spiffs_mount();
+    if (err != ESP_OK) {
+        // Preserve the old wait for the filesystem to become mounted.
+        vTaskDelay(portMAX_DELAY);
+    }
     config_parse();
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_ui_init());

@@ -5,6 +5,7 @@ mod display;
 mod ffi;
 mod i2c;
 mod logging;
+mod spiffs;
 mod state;
 mod ui;
 
