@@ -3,7 +3,6 @@
 #include "esp_lvgl_port.h"
 #include "esp_netif.h"
 #include "esp_ota_ops.h"
-#include "esp_timer.h"
 #include "lvgl.h"
 #include "sdkconfig.h"
 
@@ -124,25 +123,6 @@ err_nvs:
 
     ESP_ERROR_CHECK_WITHOUT_ABORT(
         reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), false));
-}
-
-void willow_main_loop_iteration(void)
-{
-#ifdef CONFIG_WILLOW_DEBUG_MEM
-    printf("MALLOC_CAP_INTERNAL:\n");
-    heap_caps_print_heap_info(MALLOC_CAP_INTERNAL);
-    printf("MALLOC_CAP_SPIRAM:\n");
-    heap_caps_print_heap_info(MALLOC_CAP_SPIRAM);
-#endif
-#ifdef CONFIG_WILLOW_DEBUG_TASKS
-    char buf[128];
-    vTaskList(buf);
-    printf("%s\n", buf);
-#endif
-#ifdef CONFIG_WILLOW_DEBUG_TIMERS
-    (esp_timer_dump(stdout));
-#endif
-    vTaskDelay(5000 / portTICK_PERIOD_MS);
 }
 
 #ifdef WILLOW_CARGO_FIRST
