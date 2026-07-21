@@ -1,18 +1,17 @@
 //! SNTP setup backed by the typed Willow configuration.
 //!
-//! C still determines when network initialization has reached the two points
-//! required by ESP-NETIF: initialization happens before connecting so DHCP can
-//! supply an NTP server, while startup happens after an address is acquired.
-//! The configuration, timezone setup, callback, and ESP-IDF calls live here.
+//! Transport initialization calls this module at the two points required by
+//! ESP-NETIF: initialization happens before connecting so DHCP can supply an
+//! NTP server, while startup happens after an address is acquired.
 
 use core::{ffi::c_char, ptr};
 use std::{ffi::CStr, ffi::CString, sync::OnceLock};
 
 use esp_idf_sys::{
-    CONFIG_LWIP_SNTP_MAX_SERVERS, ESP_ERR_INVALID_ARG, ESP_OK, EspError, esp_err_t,
-    esp_netif_sntp_init, esp_netif_sntp_start, esp_sntp_config_t, esp_sntp_getserver,
-    esp_sntp_getservername, esp_sntp_servermode_dhcp, esp_sntp_setservername, ip_event_t,
-    ipaddr_ntoa_r, setenv, timeval, tzset,
+    CONFIG_LWIP_SNTP_MAX_SERVERS, ESP_ERR_INVALID_ARG, EspError, esp_netif_sntp_init,
+    esp_netif_sntp_start, esp_sntp_config_t, esp_sntp_getserver, esp_sntp_getservername,
+    esp_sntp_servermode_dhcp, esp_sntp_setservername, ip_event_t, ipaddr_ntoa_r, setenv, timeval,
+    tzset,
 };
 use log::{error, info};
 use willow_schema::config::v1::NtpConfig;
@@ -135,23 +134,5 @@ pub(crate) fn start() -> Result<(), EspError> {
     match EspError::from(unsafe { esp_netif_sntp_start() }) {
         Some(error) => Err(error),
         None => Ok(()),
-    }
-}
-
-/// Compatibility entry point for C-owned network initialization.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_sntp_init(ip_event_to_renew: u32) -> esp_err_t {
-    match initialize(ip_event_to_renew as ip_event_t) {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
-    }
-}
-
-/// Compatibility entry point for C-owned network startup.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_sntp_start() -> esp_err_t {
-    match start() {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
     }
 }

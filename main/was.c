@@ -8,7 +8,6 @@
 
 #include "audio.h"
 #include "config.h"
-#include "network.h"
 #include "ota.h"
 #include "rust.h"
 #include "shared.h"

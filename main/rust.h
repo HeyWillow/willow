@@ -5,8 +5,6 @@
 #include <stdint.h>
 
 #include "esp_err.h"
-#include "esp_event_base.h"
-#include "esp_mac.h"
 #include "esp_netif.h"
 #include "driver/i2c_master.h"
 #include "freertos/queue.h"
@@ -28,15 +26,10 @@ bool rust_config_is_valid(void);
 bool rust_config_write(const char *data);
 esp_err_t rust_ethernet_init(esp_netif_t **network_interface);
 void rust_get_mac_address(void);
-void rust_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
-                           void *event_data);
 bool rust_nvs_apply(const char *data);
 bool rust_nvs_read_was_url(char *output, size_t output_len);
 bool rust_nvs_read_wifi(char *psk, size_t psk_len, char *ssid,
                         size_t ssid_len);
-esp_netif_t *rust_set_hostname(esp_netif_t *netif, esp_mac_type_t mac_type);
-esp_err_t rust_sntp_init(uint32_t ip_event_to_renew);
-esp_err_t rust_sntp_start(void);
 const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
 bool rust_state_is_nvs_ok(void);
@@ -56,5 +49,5 @@ void rust_ui_show_notification(const char *message, void *player);
 void rust_ui_show_ready(const char *message);
 void rust_ui_show_recognition(const char *heading, const char *body);
 void rust_ui_show_thinking(bool multiwake_won);
-void rust_wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
-                             void *event_data);
+esp_err_t rust_wifi_init(const char *psk, const char *ssid,
+                         esp_netif_t **network_interface);

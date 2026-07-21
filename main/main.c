@@ -8,7 +8,6 @@
 #include "audio.h"
 #include "config.h"
 #include "main.h"
-#include "network.h"
 #include "rust.h"
 #include "shared.h"
 #include "tasks.h"
@@ -39,7 +38,7 @@ void willow_init(void)
     if (!rust_nvs_read_wifi(psk, sizeof(psk), ssid, sizeof(ssid))) {
         goto err_nvs;
     }
-    init_wifi(psk, ssid);
+    (void)rust_wifi_init(psk, ssid, &hdl_netif);
 #endif
 
 #ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
