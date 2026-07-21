@@ -2,9 +2,8 @@
 //!
 //! The network interface, driver, MAC, PHY, and SPI bus remain live for the
 //! firmware lifetime, matching the previous C implementation. Rust registers
-//! callbacks directly with the system event loop that Willow C creates during
-//! system initialization; no callback crosses back into Willow's C
-//! implementation.
+//! callbacks directly with the system event loop retained by Rust's entry
+//! point; no callback crosses back into Willow's C implementation.
 
 use core::{ffi::c_void, net::Ipv4Addr, ptr};
 
@@ -194,9 +193,10 @@ unsafe extern "C" fn ip_event_handler(
 
 /// Initializes Willow's fixed W5500 Ethernet hardware.
 ///
-/// The default event loop and TCP/IP stack are initialized by the existing C
-/// startup path before this function is called. All calls from this point are
-/// directly to ESP-IDF; Rust does not call back into Willow C.
+/// The Rust entry point initializes the default event loop and the existing C
+/// startup path initializes the TCP/IP stack before this function is called.
+/// All calls from this point are directly to ESP-IDF; Rust does not call back
+/// into Willow C.
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_ethernet_init() -> esp_err_t {
     let mut network_configuration = unsafe { _g_esp_netif_inherent_eth_config };
