@@ -65,10 +65,9 @@ unsafe extern "C" fn synchronization_callback(time: *mut timeval) {
 
 /// Configures the timezone and initializes the ESP-NETIF SNTP service.
 ///
-/// C supplies the IP event that should refresh DHCP-provided servers because
-/// it still owns selection and initialization of the network interface.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_sntp_init(ip_event_to_renew: u32) -> esp_err_t {
+/// The network initializer supplies the IP event that should refresh
+/// DHCP-provided servers.
+pub(crate) fn init(ip_event_to_renew: ip_event_t) -> esp_err_t {
     info!(target: LOG_TARGET, "initializing SNTP client");
 
     let timezone = config()
@@ -91,7 +90,7 @@ pub extern "C" fn rust_sntp_init(ip_event_to_renew: u32) -> esp_err_t {
         start: false,
         sync_cb: Some(synchronization_callback),
         renew_servers_after_new_IP: true,
-        ip_event_to_renew: ip_event_to_renew as ip_event_t,
+        ip_event_to_renew,
         index_of_first_server: 0,
         num_of_servers: 0,
         servers: [ptr::null(); CONFIG_LWIP_SNTP_MAX_SERVERS as usize],
@@ -104,8 +103,7 @@ pub extern "C" fn rust_sntp_init(ip_event_to_renew: u32) -> esp_err_t {
 ///
 /// The retained [`CString`] is intentional: lwIP stores the configured host as
 /// a borrowed pointer rather than copying it.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_sntp_start() -> esp_err_t {
+pub(crate) fn start() -> esp_err_t {
     match config().and_then(|config| config.ntp_config) {
         Some(NtpConfig::Dhcp) => {
             info!(target: LOG_TARGET, "Using DHCP SNTP server");

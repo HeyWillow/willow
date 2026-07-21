@@ -1,5 +1,6 @@
 #include "esp_err.h"
 #include "esp_log.h"
+#include "esp_lvgl_port.h"
 #include "esp_netif.h"
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
@@ -14,7 +15,6 @@
 #include "input.h"
 #include "log.h"
 #include "main.h"
-#include "network.h"
 #include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
@@ -111,7 +111,14 @@ void willow_init(void)
         ESP_LOGE(TAG, "failed to get PSK from NVS namespace WIFI: %s", esp_err_to_name(err));
         goto err_nvs;
     }
-    init_wifi(psk, ssid);
+    if (lvgl_port_lock(lvgl_lock_timeout)) {
+        lv_obj_clear_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_style_text_align(lbl_ln4, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text_static(lbl_ln4, "Connecting to Wi-Fi...");
+        lvgl_port_unlock();
+    }
+
+    (void)rust_wifi_init(psk, ssid, &hdl_netif);
 #endif
 
     err = nvs_open("WAS", NVS_READONLY, &hdl_nvs);
