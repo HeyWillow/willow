@@ -28,6 +28,9 @@
 static EventGroupHandle_t hdl_evg;
 static const char *TAG = "WILLOW/NETWORK";
 
+// Rust owns event decoding and reconnect behavior. C retains registration and
+// passes its event-group handle to the IP callback as the opaque argument.
+
 void cb_sntp(struct timeval *tv)
 {
     for (uint8_t i = 0; i < CONFIG_LWIP_SNTP_MAX_SERVERS; ++i) {
@@ -108,50 +111,6 @@ esp_err_t start_sntp(void)
     return esp_netif_sntp_start();
 }
 
-static void hdlr_ev_ip(void *arg, esp_event_base_t ev_base, int32_t ev_id, void *data)
-{
-    // esp_err_t ret = ESP_OK;
-
-    if (ev_id == IP_EVENT_STA_GOT_IP) {
-        ip_event_got_ip_t *ev_ip = (ip_event_got_ip_t *)data;
-        ESP_LOGI(TAG, "received IP: " IPSTR, IP2STR(&ev_ip->ip_info.ip));
-        xEventGroupSetBits(hdl_evg, WIFI_BIT_CONNECTED);
-        return;
-    }
-
-    ESP_LOGI(TAG, "unhandled network event ev_base='%s' ev_id='%" PRId32 "'", ev_base, ev_id);
-}
-
-static void hdlr_ev_wifi(void *arg, esp_event_base_t ev_base, int32_t ev_id, void *data)
-{
-    switch (ev_id) {
-        case WIFI_EVENT_STA_CONNECTED:
-            wifi_event_sta_connected_t *ev_data_connected = (wifi_event_sta_connected_t *)data;
-            ESP_LOGI(TAG, "connected to AP (BSSID='" MACSTR "' SSID='%s' channel='%" PRIu8 "')",
-                     MAC2STR(ev_data_connected->bssid), ev_data_connected->ssid, ev_data_connected->channel);
-            break;
-
-        case WIFI_EVENT_STA_DISCONNECTED:
-            wifi_event_sta_disconnected_t *ev_data_disconnected = (wifi_event_sta_disconnected_t *)data;
-            ESP_LOGI(TAG, "disconnected from AP (BSSID='" MACSTR "' SSID='%s' reason='%" PRIu8 "' rssi='%'" PRId8 "')",
-                     MAC2STR(ev_data_disconnected->bssid), ev_data_disconnected->ssid, ev_data_disconnected->reason,
-                     ev_data_disconnected->rssi);
-            if (!rust_state_is_restarting()) {
-                ESP_LOGI(TAG, "reconnecting");
-                esp_wifi_connect();
-            }
-            break;
-
-        case WIFI_EVENT_STA_START:
-            ESP_LOGI(TAG, "WIFI_EVENT_STA_START");
-            break;
-
-        default:
-            ESP_LOGI(TAG, "unhandled network event ev_base='%s' ev_id='%" PRId32 "'", ev_base, ev_id);
-            break;
-    }
-}
-
 #ifndef CONFIG_WILLOW_ETHERNET
 esp_err_t init_wifi(const char *psk, const char *ssid)
 {
@@ -167,13 +126,13 @@ esp_err_t init_wifi(const char *psk, const char *ssid)
         return ESP_FAIL;
     }
 
-    ret = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &hdlr_ev_ip, NULL);
+    ret = esp_event_handler_register(IP_EVENT, IP_EVENT_STA_GOT_IP, &rust_ip_event_handler, hdl_evg);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "failed to register IP event handler: %s", esp_err_to_name(ret));
         return ret;
     }
 
-    ret = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &hdlr_ev_wifi, NULL);
+    ret = esp_event_handler_register(WIFI_EVENT, ESP_EVENT_ANY_ID, &rust_wifi_event_handler, NULL);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "failed to register Wi-Fi event handler: %s", esp_err_to_name(ret));
         return ret;

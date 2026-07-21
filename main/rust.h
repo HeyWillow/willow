@@ -5,6 +5,7 @@
 #include <stdint.h>
 
 #include "esp_err.h"
+#include "esp_event_base.h"
 #include "driver/i2c_master.h"
 #include "freertos/queue.h"
 
@@ -23,6 +24,8 @@ intptr_t rust_config_get_char_len(const char *key);
 int64_t rust_config_get_int(const char *key);
 bool rust_config_is_valid(void);
 bool rust_config_write(const char *data);
+void rust_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
+                           void *event_data);
 bool rust_nvs_apply(const char *data);
 bool rust_nvs_read_was_url(char *output, size_t output_len);
 bool rust_nvs_read_wifi(char *psk, size_t psk_len, char *ssid,
@@ -46,3 +49,5 @@ void rust_ui_show_notification(const char *message, void *player);
 void rust_ui_show_ready(const char *message);
 void rust_ui_show_recognition(const char *heading, const char *body);
 void rust_ui_show_thinking(bool multiwake_won);
+void rust_wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
+                             void *event_data);

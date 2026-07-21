@@ -6,6 +6,7 @@ mod ffi;
 mod i2c;
 mod input;
 mod logging;
+mod net;
 mod nvs;
 mod spiffs;
 mod state;
