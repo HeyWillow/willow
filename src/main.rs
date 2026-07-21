@@ -1,5 +1,6 @@
 mod config;
 mod ffi;
+mod network;
 mod nvs;
 mod state;
 
