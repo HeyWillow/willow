@@ -351,6 +351,17 @@ build)
     stage_cargo_build
 ;;
 
+# esp-idf-sys stages C component sources in its Cargo OUT_DIR. Deleted .c
+# and .h files can remain there during incremental builds, so expose Cargo
+# for package-scoped cleanup without requiring a full Willow rebuild.
+cargo)
+    check_container
+    check_deps
+    ensure_rust
+    shift
+    "$CARGO_HOME/bin/cargo" +esp "$@"
+;;
+
 build-docker|docker-build)
     docker build -t "$DOCKER_IMAGE" .
 ;;
