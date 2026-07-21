@@ -1,3 +1,5 @@
+#[cfg(esp_idf_willow_ethernet)]
+mod ethernet;
 pub(crate) mod ntp;
 pub(crate) mod wifi;
 
@@ -8,12 +10,21 @@ use std::{
 };
 
 use esp_idf_sys::{
-    CONFIG_LWIP_LOCAL_HOSTNAME, EspError, esp_mac_type_t, esp_netif_set_hostname, esp_netif_t,
-    esp_read_mac,
+    CONFIG_LWIP_LOCAL_HOSTNAME, EspError, esp_event_base_t, esp_mac_type_t, esp_netif_set_hostname,
+    esp_netif_t, esp_read_mac,
 };
-use log::error;
+use log::{error, info};
 
 const LOG_TARGET: &str = "WILLOW/NETWORK";
+
+fn log_unhandled(event_base: esp_event_base_t, event_id: i32) {
+    let event_base = if event_base.is_null() {
+        Cow::Borrowed("<null>")
+    } else {
+        unsafe { CStr::from_ptr(event_base) }.to_string_lossy()
+    };
+    info!(target: LOG_TARGET, "unhandled network event ev_base='{event_base}' ev_id='{event_id}'");
+}
 
 /// Sets a network interface's hostname from its hardware MAC address.
 ///

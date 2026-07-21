@@ -26,6 +26,7 @@ intptr_t rust_config_get_char_len(const char *key);
 int64_t rust_config_get_int(const char *key);
 bool rust_config_is_valid(void);
 bool rust_config_write(const char *data);
+esp_err_t rust_ethernet_init(esp_netif_t **network_interface);
 void rust_get_mac_address(void);
 void rust_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
                            void *event_data);

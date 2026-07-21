@@ -11,7 +11,7 @@ use core::{
     net::Ipv4Addr,
     ptr::{self, NonNull},
 };
-use std::{borrow::Cow, ffi::CStr};
+use std::borrow::Cow;
 
 use esp_idf_sys::{
     EventGroupDef_t, esp_event_base_t, esp_mac_type_t, esp_netif_t, esp_wifi_connect,
@@ -26,19 +26,10 @@ use log::{error, info};
 
 use crate::state;
 
-use super::set_hostname;
+use super::{log_unhandled, set_hostname};
 
 const LOG_TARGET: &str = "WILLOW/NETWORK";
 const WIFI_BIT_CONNECTED: u32 = 1;
-
-fn log_unhandled(event_base: esp_event_base_t, event_id: i32) {
-    let event_base = if event_base.is_null() {
-        Cow::Borrowed("<null>")
-    } else {
-        unsafe { CStr::from_ptr(event_base) }.to_string_lossy()
-    };
-    info!(target: LOG_TARGET, "unhandled network event ev_base='{event_base}' ev_id='{event_id}'");
-}
 
 fn ssid(bytes: &[u8; 32], length: u8) -> Cow<'_, str> {
     String::from_utf8_lossy(&bytes[..usize::from(length).min(bytes.len())])

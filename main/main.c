@@ -18,10 +18,6 @@
 #include "psa/crypto.h"
 #endif
 
-#if defined(CONFIG_WILLOW_ETHERNET)
-#include "net/ethernet.h"
-#endif
-
 #define DEFAULT_WIS_URL "https://infer.tovera.io/api/willow"
 
 #define I2S_PORT I2S_NUM_0
@@ -36,7 +32,7 @@ void willow_init(void)
     ESP_ERROR_CHECK(esp_netif_init());
 
 #ifdef CONFIG_WILLOW_ETHERNET
-    init_ethernet();
+    ESP_ERROR_CHECK(rust_ethernet_init(&hdl_netif));
 #else
     char psk[64];
     char ssid[33];
