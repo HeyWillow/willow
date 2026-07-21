@@ -15,6 +15,7 @@
 #include "log.h"
 #include "main.h"
 #include "network.h"
+#include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
@@ -38,7 +39,6 @@
 
 char was_url[2048];
 static const char *TAG = "WILLOW/MAIN";
-enum willow_state state;
 
 esp_periph_set_handle_t hdl_pset;
 
@@ -69,7 +69,6 @@ static esp_err_t init_spiffs_user(void)
 
 void willow_init(void)
 {
-    state = STATE_INIT;
     esp_err_t err;
 
     init_logging();
@@ -135,7 +134,7 @@ void willow_init(void)
         ESP_LOGE(TAG, "failed to get WASL URL from NVS namespace WAS: %s", esp_err_to_name(err));
         goto err_nvs;
     }
-    state = STATE_NVS_OK;
+    rust_state_mark_nvs_ok();
     err = init_was();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to initialize Willow Application Server connection");
@@ -149,7 +148,7 @@ void willow_init(void)
 
 // we jump over WAS initialization was without Wi-Fi this will never work
 err_nvs:
-    if (state < STATE_NVS_OK) {
+    if (!rust_state_is_nvs_ok()) {
         ui_pr_err("Fatal error!", "Failed to read NVS partition.");
         // wait "indefinitely"
         vTaskDelay(portMAX_DELAY);

@@ -330,7 +330,7 @@ void was_deinit_task(void *data)
 
 void deinit_was(void)
 {
-    restarting = true;
+    rust_state_mark_restarting();
     send_hello_goodbye("goodbye");
     // needs to be done in a task to avoid this error:
     // WEBSOCKET_CLIENT: Client cannot be stopped from websocket task
@@ -341,7 +341,7 @@ void deinit_was(void)
 
 esp_err_t init_was(void)
 {
-    if (restarting) {
+    if (rust_state_is_restarting()) {
         return ESP_OK;
     }
 

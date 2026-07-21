@@ -1,6 +1,7 @@
 mod config;
 mod ffi;
 mod nvs;
+mod state;
 
 fn main() {
     esp_idf_sys::link_patches();
@@ -9,6 +10,7 @@ fn main() {
     log::info!(target: "WILLOW/RUST", "entered Rust main()");
     nvs::init().expect("failed to initialize NVS");
 
+    state::mark_init();
     ffi::init();
 
     loop {

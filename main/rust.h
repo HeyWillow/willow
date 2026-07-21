@@ -11,3 +11,7 @@ int64_t rust_config_get_int(const char *key);
 bool rust_config_load(void);
 bool rust_config_write(const char *data);
 bool rust_nvs_apply(const char *data);
+bool rust_state_is_nvs_ok(void);
+bool rust_state_is_restarting(void);
+void rust_state_mark_nvs_ok(void);
+void rust_state_mark_restarting(void);

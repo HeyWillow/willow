@@ -11,9 +11,9 @@
 
 #include "config.h"
 #include "network.h"
+#include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
-#include "system.h"
 
 #define DEFAULT_NTP_CONFIG "Host"
 #define DEFAULT_NTP_HOST   "pool.ntp.org"
@@ -144,7 +144,7 @@ static void hdlr_ev_wifi(void *arg, esp_event_base_t ev_base, int32_t ev_id, voi
             ESP_LOGI(TAG, "disconnected from AP (BSSID='" MACSTR "' SSID='%s' reason='%" PRIu8 "' rssi='%'" PRId8 "')",
                      MAC2STR(ev_data_disconnected->bssid), ev_data_disconnected->ssid, ev_data_disconnected->reason,
                      ev_data_disconnected->rssi);
-            if (!restarting) {
+            if (!rust_state_is_restarting()) {
                 ESP_LOGI(TAG, "reconnecting");
                 esp_wifi_connect();
             }
