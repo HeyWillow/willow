@@ -22,7 +22,7 @@ const LOG_TARGET: &str = "WILLOW/CONFIG";
 /// Keeping the document in a [`OnceLock`] makes its references stable and
 /// reflects the firmware lifecycle: writing a new configuration schedules a
 /// restart instead of mutating the active document.
-fn config() -> Option<&'static Config> {
+pub(crate) fn config() -> Option<&'static Config> {
     CONFIG.get()
 }
 

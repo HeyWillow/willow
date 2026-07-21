@@ -2,6 +2,7 @@ mod config;
 mod ffi;
 mod network;
 mod nvs;
+mod sntp;
 mod state;
 
 fn main() {
