@@ -24,6 +24,9 @@ int64_t rust_config_get_int(const char *key);
 bool rust_config_is_valid(void);
 bool rust_config_write(const char *data);
 bool rust_nvs_apply(const char *data);
+bool rust_nvs_read_was_url(char *output, size_t output_len);
+bool rust_nvs_read_wifi(char *psk, size_t psk_len, char *ssid,
+                        size_t ssid_len);
 const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
 bool rust_state_is_nvs_ok(void);
