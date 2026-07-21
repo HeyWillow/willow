@@ -23,16 +23,13 @@
 #define INET6_ADDRSTRLEN 48
 #endif
 
-#define HOSTNAME_SIZE 20
-#define MAC_ADDR_SIZE 6
-
 #define WIFI_BIT_CONNECTED BIT0
 
 static EventGroupHandle_t hdl_evg;
 static const char *TAG = "WILLOW/NETWORK";
 
-// Rust owns event decoding and reconnect behavior. C retains registration and
-// passes its event-group handle to the IP callback as the opaque argument.
+// Rust owns migrated network helpers. C retains event registration, passes its
+// event-group handle to the IP callback, and stores the returned netif handle.
 
 void cb_sntp(struct timeval *tv)
 {
@@ -48,33 +45,6 @@ void cb_sntp(struct timeval *tv)
                 ESP_LOGI(TAG, "SNTP client synchronized time to %lld from server %s", tv->tv_sec, buff);
             }
         }
-    }
-}
-
-void set_hostname(esp_mac_type_t emt)
-{
-    esp_err_t ret = ESP_OK;
-    uint8_t mac[MAC_ADDR_SIZE];
-
-    ret = esp_read_mac(mac, emt);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "failed to read MAC address, using default hostname (%s)", CONFIG_LWIP_LOCAL_HOSTNAME);
-        return;
-    }
-
-    while (esp_netif_get_nr_of_ifs() == 0) {
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-    }
-
-    char hostname[HOSTNAME_SIZE];
-    hdl_netif = esp_netif_next_unsafe(NULL);
-
-    snprintf(hostname, HOSTNAME_SIZE, "willow-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4],
-             mac[5]);
-
-    ret = esp_netif_set_hostname(hdl_netif, hostname);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "failed to set hostname (%s): %s", hostname, esp_err_to_name(ret));
     }
 }
 
@@ -177,7 +147,7 @@ esp_err_t init_wifi(const char *psk, const char *ssid)
     strlcpy((char *)cfg_wifi.sta.password, psk, sizeof(cfg_wifi.sta.password));
     strlcpy((char *)cfg_wifi.sta.ssid, ssid, sizeof(cfg_wifi.sta.ssid));
 
-    set_hostname(ESP_MAC_WIFI_STA);
+    hdl_netif = rust_set_hostname(ESP_MAC_WIFI_STA);
 
     ret = esp_wifi_set_config(ESP_IF_WIFI_STA, &cfg_wifi);
     if (ret != ESP_OK) {

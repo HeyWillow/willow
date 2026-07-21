@@ -1,20 +1,27 @@
 //! ESP-IDF network operations migrated from the remaining C initialization.
 //!
 //! C still creates the Wi-Fi event group and registers these callbacks. The IP
-//! callback receives that event group as its opaque argument. Callback logic
-//! and MAC address retrieval stay entirely in Rust and call only ESP-IDF
-//! through `esp-idf-sys`; they do not call back into Willow's C implementation.
+//! callback receives that event group as its opaque argument. Callback logic,
+//! hostname setup, and MAC address retrieval stay entirely in Rust and call only
+//! ESP-IDF through `esp-idf-sys`; they do not call back into Willow's C
+//! implementation.
 
-use core::{ffi::c_void, net::Ipv4Addr};
-use std::{borrow::Cow, ffi::CStr};
+use core::{ffi::c_void, net::Ipv4Addr, ptr};
+use std::{
+    borrow::Cow,
+    ffi::{CStr, CString},
+};
 
 use esp_idf_sys::{
-    esp_event_base_t, esp_wifi_connect, esp_wifi_get_mac, ip_event_got_ip_t,
-    ip_event_t_IP_EVENT_STA_GOT_IP, wifi_event_sta_connected_t, wifi_event_sta_disconnected_t,
+    esp_event_base_t, esp_mac_type_t, esp_netif_get_nr_of_ifs, esp_netif_next_unsafe,
+    esp_netif_set_hostname, esp_netif_t, esp_read_mac, esp_wifi_connect, esp_wifi_get_mac,
+    ip_event_got_ip_t, ip_event_t_IP_EVENT_STA_GOT_IP, vTaskDelay, wifi_event_sta_connected_t,
+    wifi_event_sta_disconnected_t,
     wifi_event_t_WIFI_EVENT_STA_CONNECTED as WIFI_EVENT_STA_CONNECTED,
     wifi_event_t_WIFI_EVENT_STA_DISCONNECTED as WIFI_EVENT_STA_DISCONNECTED,
     wifi_event_t_WIFI_EVENT_STA_START as WIFI_EVENT_STA_START,
-    wifi_interface_t_WIFI_IF_STA as WIFI_IF_STA, xEventGroupSetBits, EventGroupDef_t,
+    wifi_interface_t_WIFI_IF_STA as WIFI_IF_STA, xEventGroupSetBits, EspError, EventGroupDef_t,
+    CONFIG_FREERTOS_HZ, CONFIG_LWIP_LOCAL_HOSTNAME,
 };
 use log::{error, info};
 
@@ -46,6 +53,49 @@ pub extern "C" fn rust_get_mac_address() {
     let _ = unsafe { esp_wifi_get_mac(WIFI_IF_STA, address.as_mut_ptr()) };
     let [a, b, c, d, e, f] = address;
     info!(target: LOG_TARGET, "MAC address: {a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}");
+}
+
+/// Sets the first network interface's hostname from its hardware MAC address.
+///
+/// The returned interface remains owned by ESP-IDF. C stores this borrowed
+/// pointer in its existing `hdl_netif` global for the WAS code that still
+/// reads the hostname there.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_set_hostname(mac_type: esp_mac_type_t) -> *mut esp_netif_t {
+    let mut address = [0; 6];
+    if EspError::from(unsafe { esp_read_mac(address.as_mut_ptr(), mac_type) }).is_some() {
+        let default_hostname = CStr::from_bytes_with_nul(CONFIG_LWIP_LOCAL_HOSTNAME)
+            .map(CStr::to_string_lossy)
+            .unwrap_or(Cow::Borrowed("<invalid>"));
+        error!(
+            target: LOG_TARGET,
+            "failed to read MAC address, using default hostname ({default_hostname})"
+        );
+        return ptr::null_mut();
+    }
+
+    while unsafe { esp_netif_get_nr_of_ifs() } == 0 {
+        unsafe {
+            vTaskDelay(CONFIG_FREERTOS_HZ / 10);
+        }
+    }
+
+    let [a, b, c, d, e, f] = address;
+    let hostname = CString::new(format!("willow-{a:02x}{b:02x}{c:02x}{d:02x}{e:02x}{f:02x}"))
+        .expect("a formatted MAC address cannot contain NUL");
+    let network_interface = unsafe { esp_netif_next_unsafe(ptr::null_mut()) };
+
+    if let Some(error) =
+        EspError::from(unsafe { esp_netif_set_hostname(network_interface, hostname.as_ptr()) })
+    {
+        error!(
+            target: LOG_TARGET,
+            "failed to set hostname ({}): {error}",
+            hostname.to_string_lossy()
+        );
+    }
+
+    network_interface
 }
 
 /// Handles the ESP-IDF station-address event and releases C's connection
