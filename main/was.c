@@ -36,7 +36,7 @@ struct notify_data {
     char *audio_url;
     bool backlight;
     bool backlight_max;
-    bool cancel;
+    _Atomic bool cancel;
     char *text;
     int repeat;
     int strobe_period_ms;
