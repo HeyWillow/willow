@@ -80,7 +80,6 @@ static void got_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t
 esp_err_t init_ethernet(void)
 {
     esp_err_t ret = ESP_OK;
-    ESP_ERROR_CHECK(esp_event_loop_create_default());
 
     // Start Ethernet
     if (lvgl_port_lock(lvgl_lock_timeout)) {
