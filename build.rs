@@ -6,7 +6,10 @@ fn main() {
     println!("cargo:rustc-check-cfg=cfg(esp_idf_esp32_s3_box_3_board)");
     println!("cargo:rustc-check-cfg=cfg(esp_idf_mbedtls_ssl_proto_tls1_3)");
     println!("cargo:rustc-check-cfg=cfg(esp_idf_willow_debug_log)");
+    println!("cargo:rustc-check-cfg=cfg(esp_idf_willow_debug_mem)");
     println!("cargo:rustc-check-cfg=cfg(esp_idf_willow_debug_runtime_stats)");
+    println!("cargo:rustc-check-cfg=cfg(esp_idf_willow_debug_tasks)");
+    println!("cargo:rustc-check-cfg=cfg(esp_idf_willow_debug_timers)");
     println!("cargo:rustc-check-cfg=cfg(esp_idf_willow_ethernet)");
     println!("cargo:rustc-link-arg=-Wl,--start-group");
     println!("cargo:rustc-link-arg=-lm");
