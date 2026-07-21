@@ -10,29 +10,23 @@ use core::{
     net::Ipv4Addr,
     ptr,
 };
-use std::{
-    borrow::Cow,
-    ffi::{CStr, CString},
-};
+use std::{borrow::Cow, ffi::CStr};
 
 use esp_idf_sys::{
     CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM, CONFIG_ESP_WIFI_DYNAMIC_RX_MGMT_BUF,
     CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM, CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM,
-    CONFIG_ESP_WIFI_TX_BUFFER_TYPE, CONFIG_FREERTOS_HZ, CONFIG_LWIP_LOCAL_HOSTNAME,
-    ESP_ERR_INVALID_ARG, ESP_ERR_NO_MEM, ESP_EVENT_ANY_ID, ESP_FAIL, EspError, EventGroupDef_t,
-    IP_EVENT, WIFI_AMPDU_RX_ENABLED, WIFI_AMPDU_TX_ENABLED, WIFI_AMSDU_TX_ENABLED,
-    WIFI_CACHE_TX_BUFFER_NUM, WIFI_CSI_ENABLED, WIFI_DEFAULT_RX_BA_WIN, WIFI_DUMP_HESIGB_ENABLED,
-    WIFI_DYNAMIC_TX_BUFFER_NUM, WIFI_EVENT, WIFI_FEATURE_CAPS, WIFI_INIT_CONFIG_MAGIC,
-    WIFI_MGMT_SBUF_NUM, WIFI_NANO_FORMAT_ENABLED, WIFI_NVS_ENABLED, WIFI_RX_MGMT_BUF_NUM_DEF,
-    WIFI_SOFTAP_BEACON_MAX_LEN, WIFI_STA_DISCONNECTED_PM_ENABLED, WIFI_STATIC_TX_BUFFER_NUM,
-    WIFI_TASK_CORE_ID, WIFI_TX_HETB_QUEUE_NUM, esp_err_t, esp_event_base_t,
-    esp_event_handler_register, esp_mac_type_t, esp_netif_create_default_wifi_sta,
-    esp_netif_get_nr_of_ifs, esp_netif_next_unsafe, esp_netif_set_hostname, esp_netif_t,
-    esp_read_mac, esp_wifi_connect, esp_wifi_get_mac, esp_wifi_init, esp_wifi_set_config,
-    esp_wifi_set_ps, esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_osi_funcs,
-    ip_event_got_ip_t, ip_event_t_IP_EVENT_STA_GOT_IP, vTaskDelay,
-    wifi_auth_mode_t_WIFI_AUTH_WPA2_PSK, wifi_config_t, wifi_event_sta_connected_t,
-    wifi_event_sta_disconnected_t,
+    CONFIG_ESP_WIFI_TX_BUFFER_TYPE, ESP_ERR_INVALID_ARG, ESP_ERR_NO_MEM, ESP_EVENT_ANY_ID,
+    ESP_FAIL, EventGroupDef_t, IP_EVENT, WIFI_AMPDU_RX_ENABLED, WIFI_AMPDU_TX_ENABLED,
+    WIFI_AMSDU_TX_ENABLED, WIFI_CACHE_TX_BUFFER_NUM, WIFI_CSI_ENABLED, WIFI_DEFAULT_RX_BA_WIN,
+    WIFI_DUMP_HESIGB_ENABLED, WIFI_DYNAMIC_TX_BUFFER_NUM, WIFI_EVENT, WIFI_FEATURE_CAPS,
+    WIFI_INIT_CONFIG_MAGIC, WIFI_MGMT_SBUF_NUM, WIFI_NANO_FORMAT_ENABLED, WIFI_NVS_ENABLED,
+    WIFI_RX_MGMT_BUF_NUM_DEF, WIFI_SOFTAP_BEACON_MAX_LEN, WIFI_STA_DISCONNECTED_PM_ENABLED,
+    WIFI_STATIC_TX_BUFFER_NUM, WIFI_TASK_CORE_ID, WIFI_TX_HETB_QUEUE_NUM, esp_err_t,
+    esp_event_base_t, esp_event_handler_register, esp_netif_create_default_wifi_sta, esp_netif_t,
+    esp_wifi_connect, esp_wifi_get_mac, esp_wifi_init, esp_wifi_set_config, esp_wifi_set_ps,
+    esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_osi_funcs, ip_event_got_ip_t,
+    ip_event_t_IP_EVENT_STA_GOT_IP, wifi_auth_mode_t_WIFI_AUTH_WPA2_PSK, wifi_config_t,
+    wifi_event_sta_connected_t, wifi_event_sta_disconnected_t,
     wifi_event_t_WIFI_EVENT_STA_CONNECTED as WIFI_EVENT_STA_CONNECTED,
     wifi_event_t_WIFI_EVENT_STA_DISCONNECTED as WIFI_EVENT_STA_DISCONNECTED,
     wifi_event_t_WIFI_EVENT_STA_START as WIFI_EVENT_STA_START, wifi_init_config_t,
@@ -44,30 +38,13 @@ use log::{error, info};
 
 use crate::{sntp, state};
 
-const LOG_TARGET: &str = "WILLOW/NETWORK";
-const WIFI_BIT_CONNECTED: u32 = 1;
+use super::{LOG_TARGET, check, log_unhandled, set_hostname};
 
-fn check(result: esp_err_t, operation: &str) -> Result<(), esp_err_t> {
-    if let Some(error) = EspError::from(result) {
-        error!(target: LOG_TARGET, "{operation}: {error}");
-        Err(result)
-    } else {
-        Ok(())
-    }
-}
+const CONNECTED_BIT: u32 = 1;
 
 fn copy_c_string<const LENGTH: usize>(destination: &mut [u8; LENGTH], source: &[u8]) {
     let copy_length = source.len().min(LENGTH.saturating_sub(1));
     destination[..copy_length].copy_from_slice(&source[..copy_length]);
-}
-
-fn log_unhandled(event_base: esp_event_base_t, event_id: i32) {
-    let event_base = if event_base.is_null() {
-        Cow::Borrowed("<null>")
-    } else {
-        unsafe { CStr::from_ptr(event_base) }.to_string_lossy()
-    };
-    info!(target: LOG_TARGET, "unhandled network event ev_base='{event_base}' ev_id='{event_id}'");
 }
 
 fn ssid(bytes: &[u8; 32], length: u8) -> Cow<'_, str> {
@@ -139,48 +116,6 @@ pub extern "C" fn rust_get_mac_address() {
     info!(target: LOG_TARGET, "MAC address: {a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}");
 }
 
-/// Sets the first network interface's hostname from its hardware MAC address.
-///
-/// The returned interface remains owned by ESP-IDF. C stores this borrowed
-/// pointer in its existing `hdl_netif` global for the WAS code that still
-/// reads the hostname there.
-fn set_hostname(mac_type: esp_mac_type_t) -> *mut esp_netif_t {
-    let mut address = [0; 6];
-    if EspError::from(unsafe { esp_read_mac(address.as_mut_ptr(), mac_type) }).is_some() {
-        let default_hostname = CStr::from_bytes_with_nul(CONFIG_LWIP_LOCAL_HOSTNAME)
-            .map(CStr::to_string_lossy)
-            .unwrap_or(Cow::Borrowed("<invalid>"));
-        error!(
-            target: LOG_TARGET,
-            "failed to read MAC address, using default hostname ({default_hostname})"
-        );
-        return ptr::null_mut();
-    }
-
-    while unsafe { esp_netif_get_nr_of_ifs() } == 0 {
-        unsafe {
-            vTaskDelay(CONFIG_FREERTOS_HZ / 10);
-        }
-    }
-
-    let [a, b, c, d, e, f] = address;
-    let hostname = CString::new(format!("willow-{a:02x}{b:02x}{c:02x}{d:02x}{e:02x}{f:02x}"))
-        .expect("a formatted MAC address cannot contain NUL");
-    let network_interface = unsafe { esp_netif_next_unsafe(ptr::null_mut()) };
-
-    if let Some(error) =
-        EspError::from(unsafe { esp_netif_set_hostname(network_interface, hostname.as_ptr()) })
-    {
-        error!(
-            target: LOG_TARGET,
-            "failed to set hostname ({}): {error}",
-            hostname.to_string_lossy()
-        );
-    }
-
-    network_interface
-}
-
 /// Handles the ESP-IDF station-address event and releases the connection wait.
 ///
 /// # Safety
@@ -210,7 +145,7 @@ unsafe extern "C" fn ip_event_handler(
         }
 
         unsafe {
-            xEventGroupSetBits(event_group.cast::<EventGroupDef_t>(), WIFI_BIT_CONNECTED);
+            xEventGroupSetBits(event_group.cast::<EventGroupDef_t>(), CONNECTED_BIT);
         }
         return;
     }
@@ -226,7 +161,7 @@ unsafe extern "C" fn ip_event_handler(
 /// For connected and disconnected station events, `event_data` must point to
 /// the corresponding ESP-IDF event structure for the duration of this call.
 /// `event_base` must be null or point to a live NUL-terminated event-base name.
-unsafe extern "C" fn wifi_event_handler(
+unsafe extern "C" fn event_handler(
     _event_handler_arg: *mut c_void,
     event_base: esp_event_base_t,
     event_id: i32,
@@ -339,7 +274,7 @@ pub unsafe extern "C" fn rust_wifi_init(
         esp_event_handler_register(
             WIFI_EVENT,
             ESP_EVENT_ANY_ID,
-            Some(wifi_event_handler),
+            Some(event_handler),
             ptr::null_mut(),
         )
     };
@@ -374,7 +309,7 @@ pub unsafe extern "C" fn rust_wifi_init(
     // The event-group allocation intentionally remains live because the
     // registered IP callback keeps using its handle after this function exits.
     unsafe {
-        xEventGroupWaitBits(event_group, WIFI_BIT_CONNECTED, 0, 0, u32::MAX);
+        xEventGroupWaitBits(event_group, CONNECTED_BIT, 0, 0, u32::MAX);
     }
 
     let _ = sntp::start();

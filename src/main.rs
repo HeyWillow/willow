@@ -1,7 +1,7 @@
 mod config;
 mod ffi;
 mod logging;
-mod network;
+mod net;
 mod nvs;
 mod sntp;
 mod state;
