@@ -16,7 +16,6 @@
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
-#include "tasks.h"
 #include "timer.h"
 #include "ui.h"
 #include "was.h"
@@ -125,10 +124,6 @@ err_nvs:
 
     ESP_ERROR_CHECK_WITHOUT_ABORT(
         reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), false));
-
-#ifdef CONFIG_WILLOW_DEBUG_RUNTIME_STATS
-    xTaskCreate(&task_debug_runtime_stats, "dbg_runtime_stats", 4 * 1024, NULL, 0, NULL);
-#endif
 }
 
 void willow_main_loop_iteration(void)

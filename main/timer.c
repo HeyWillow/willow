@@ -6,7 +6,6 @@
 
 #include "audio.h"
 #include "display.h"
-#include "tasks.h"
 #include "timer.h"
 
 static const char *TAG = "WILLOW/TIMER";

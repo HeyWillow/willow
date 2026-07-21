@@ -3,6 +3,8 @@ mod ffi;
 mod logging;
 mod net;
 mod nvs;
+#[cfg(esp_idf_willow_debug_runtime_stats)]
+mod runtime_stats;
 mod sntp;
 mod spiffs;
 mod state;
@@ -26,6 +28,9 @@ fn main() {
         EspSystemEventLoop::take().expect("failed to initialize default event loop");
 
     ffi::init();
+
+    #[cfg(esp_idf_willow_debug_runtime_stats)]
+    let _ = runtime_stats::start();
 
     loop {
         ffi::main_loop_iteration();
