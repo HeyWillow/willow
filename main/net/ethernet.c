@@ -163,7 +163,7 @@ esp_err_t init_ethernet(void)
         ESP_ERROR_CHECK(esp_netif_attach(eth_netif_spi[i], esp_eth_new_netif_glue(eth_handle_spi[i])));
     }
 
-    set_hostname(eth_netif_spi[0], ESP_MAC_ETH);
+    hdl_netif = rust_set_hostname(eth_netif_spi[0], ESP_MAC_ETH);
 
     // Register user defined event handers
     ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID, &eth_event_handler, NULL));

@@ -1,16 +1,22 @@
 //! ESP-IDF Wi-Fi operations migrated from the remaining C initialization.
 //!
 //! C still creates the Wi-Fi event group and registers these callbacks. The IP
-//! callback receives that event group as its opaque argument. Callback logic
-//! and MAC address retrieval stay entirely in Rust and call only ESP-IDF
-//! through `esp-idf-sys`; they do not call back into Willow's C implementation.
+//! callback receives that event group as its opaque argument. Callback logic,
+//! hostname setup, and MAC address retrieval stay entirely in Rust and call
+//! only ESP-IDF through `esp-idf-sys`; they do not call back into Willow's C
+//! implementation.
 
-use core::{ffi::c_void, net::Ipv4Addr};
+use core::{
+    ffi::c_void,
+    net::Ipv4Addr,
+    ptr::{self, NonNull},
+};
 use std::{borrow::Cow, ffi::CStr};
 
 use esp_idf_sys::{
-    EventGroupDef_t, esp_event_base_t, esp_wifi_connect, esp_wifi_get_mac, ip_event_got_ip_t,
-    ip_event_t_IP_EVENT_STA_GOT_IP, wifi_event_sta_connected_t, wifi_event_sta_disconnected_t,
+    EventGroupDef_t, esp_event_base_t, esp_mac_type_t, esp_netif_t, esp_wifi_connect,
+    esp_wifi_get_mac, ip_event_got_ip_t, ip_event_t_IP_EVENT_STA_GOT_IP,
+    wifi_event_sta_connected_t, wifi_event_sta_disconnected_t,
     wifi_event_t_WIFI_EVENT_STA_CONNECTED as WIFI_EVENT_STA_CONNECTED,
     wifi_event_t_WIFI_EVENT_STA_DISCONNECTED as WIFI_EVENT_STA_DISCONNECTED,
     wifi_event_t_WIFI_EVENT_STA_START as WIFI_EVENT_STA_START,
@@ -19,6 +25,8 @@ use esp_idf_sys::{
 use log::{error, info};
 
 use crate::state;
+
+use super::set_hostname;
 
 const LOG_TARGET: &str = "WILLOW/NETWORK";
 const WIFI_BIT_CONNECTED: u32 = 1;
@@ -129,6 +137,24 @@ pub(crate) fn log_mac_address() {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_get_mac_address() {
     log_mac_address();
+}
+
+/// Compatibility entry point for the remaining C startup path.
+///
+/// # Safety
+///
+/// `network_interface` must point to a live ESP-IDF network interface.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_set_hostname(
+    network_interface: *mut esp_netif_t,
+    mac_type: esp_mac_type_t,
+) -> *mut esp_netif_t {
+    let Some(network_interface) = NonNull::new(network_interface) else {
+        error!(target: LOG_TARGET, "cannot set hostname on a null network interface");
+        return ptr::null_mut();
+    };
+
+    set_hostname(network_interface, mac_type).map_or(ptr::null_mut(), NonNull::as_ptr)
 }
 
 /// Handles the ESP-IDF station-address event and releases C's connection

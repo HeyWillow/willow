@@ -6,6 +6,8 @@
 
 #include "esp_err.h"
 #include "esp_event_base.h"
+#include "esp_mac.h"
+#include "esp_netif.h"
 #include "driver/i2c_master.h"
 #include "freertos/queue.h"
 
@@ -31,6 +33,7 @@ bool rust_nvs_apply(const char *data);
 bool rust_nvs_read_was_url(char *output, size_t output_len);
 bool rust_nvs_read_wifi(char *psk, size_t psk_len, char *ssid,
                         size_t ssid_len);
+esp_netif_t *rust_set_hostname(esp_netif_t *netif, esp_mac_type_t mac_type);
 const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
 bool rust_state_is_nvs_ok(void);
