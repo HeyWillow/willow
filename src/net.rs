@@ -1,3 +1,4 @@
+pub(crate) mod ntp;
 pub(crate) mod wifi;
 
 use core::ptr::NonNull;

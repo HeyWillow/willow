@@ -81,7 +81,7 @@ esp_err_t init_ethernet(void)
 {
     esp_err_t ret = ESP_OK;
 
-    init_sntp();
+    rust_sntp_init(IP_EVENT_ETH_GOT_IP);
 
     // Start Ethernet
     rust_ui_show_connecting("Connecting to Ethernet ...");
@@ -183,7 +183,7 @@ esp_err_t init_ethernet(void)
     // HACK
     vTaskDelay(5000 / portTICK_PERIOD_MS);
 
-    start_sntp();
+    rust_sntp_start();
 
     return ret;
 }

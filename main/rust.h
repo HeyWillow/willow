@@ -34,6 +34,8 @@ bool rust_nvs_read_was_url(char *output, size_t output_len);
 bool rust_nvs_read_wifi(char *psk, size_t psk_len, char *ssid,
                         size_t ssid_len);
 esp_netif_t *rust_set_hostname(esp_netif_t *netif, esp_mac_type_t mac_type);
+esp_err_t rust_sntp_init(uint32_t ip_event_to_renew);
+esp_err_t rust_sntp_start(void);
 const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
 bool rust_state_is_nvs_ok(void);
