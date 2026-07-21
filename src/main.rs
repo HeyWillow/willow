@@ -10,6 +10,8 @@ mod input;
 mod logging;
 mod net;
 mod nvs;
+#[cfg(esp_idf_willow_debug_runtime_stats)]
+mod runtime_stats;
 mod spiffs;
 mod state;
 mod system;
@@ -65,6 +67,9 @@ fn main() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
     ffi::init();
+
+    #[cfg(esp_idf_willow_debug_runtime_stats)]
+    let _ = runtime_stats::start();
 
     loop {
         ffi::main_loop_iteration();

@@ -9,7 +9,6 @@
 #include "main.h"
 #include "rust.h"
 #include "shared.h"
-#include "tasks.h"
 #include "was.h"
 
 #define DEFAULT_WIS_URL "https://infer.tovera.io/api/willow"
@@ -62,9 +61,6 @@ void willow_init(void)
 
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_timer_reset(false));
 
-#ifdef CONFIG_WILLOW_DEBUG_RUNTIME_STATS
-    xTaskCreate(&task_debug_runtime_stats, "dbg_runtime_stats", 4 * 1024, NULL, 0, NULL);
-#endif
 }
 
 void willow_main_loop_iteration(void)
