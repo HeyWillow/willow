@@ -17,7 +17,7 @@ esp-idf-sys = "=0.37.2"
 log = "0.4"
 rusttype = { version = "=0.9.3", default-features = false, features = ["libm-math"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
-willow-schema = { git = "https://github.com/HeyWillow/willow-schema.git", rev = "1af0ddea34b82044c5879531cc4859a8a6d8b32a" }
+willow-schema = { git = "https://github.com/HeyWillow/willow-schema.git", rev = "1622fcfb006b62763fe62b95e10f0b82bf454ba1" }
 
 [build-dependencies]
 embuild = "=0.33.1"

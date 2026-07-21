@@ -3,7 +3,7 @@
 #include "esp_netif.h"
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
-#include "nvs_flash.h"
+#include "nvs.h"
 #include "sdkconfig.h"
 
 #include "audio.h"
@@ -35,14 +35,6 @@ void willow_init(void)
     esp_err_t err;
 
     ESP_ERROR_CHECK(esp_netif_init());
-
-    err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES) {
-        // NVS partition was truncated and needs to be erased
-        // Retry nvs_flash_init
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ESP_ERROR_CHECK(nvs_flash_init());
-    }
 
     nvs_handle_t hdl_nvs;
     size_t sz;

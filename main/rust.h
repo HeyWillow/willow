@@ -23,6 +23,7 @@ intptr_t rust_config_get_char_len(const char *key);
 int64_t rust_config_get_int(const char *key);
 bool rust_config_is_valid(void);
 bool rust_config_write(const char *data);
+bool rust_nvs_apply(const char *data);
 const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
 bool rust_state_is_nvs_ok(void);

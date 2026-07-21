@@ -6,6 +6,7 @@ mod ffi;
 mod i2c;
 mod input;
 mod logging;
+mod nvs;
 mod spiffs;
 mod state;
 mod system;
@@ -43,6 +44,11 @@ fn main() {
     }
     if let Err(error) = ui::initialize() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize UI: {error}");
+    }
+    if let Err(error) = nvs::initialize() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize NVS: {error}");
+        ui::show_error("Fatal error!", Some("Failed to read NVS partition."));
+        unsafe { esp_idf_sys::vTaskDelay(u32::MAX) }
     }
 
     if let Err(error) = audio::initialize_recorder_queue() {
