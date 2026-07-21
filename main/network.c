@@ -30,7 +30,6 @@
 
 static EventGroupHandle_t hdl_evg;
 static const char *TAG = "WILLOW/NETWORK";
-uint8_t mac_address[6] = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55};
 
 // Rust owns event decoding and reconnect behavior. C retains registration and
 // passes its event-group handle to the IP callback as the opaque argument.
@@ -211,10 +210,3 @@ esp_err_t init_wifi(const char *psk, const char *ssid)
     return ret;
 }
 #endif
-
-void get_mac_address(void)
-{
-    uint8_t mac[MAC_ADDR_SIZE];
-    esp_wifi_get_mac(ESP_IF_WIFI_STA, mac);
-    ESP_LOGI(TAG, "MAC address: %02x:%02x:%02x:%02x:%02x:%02x", mac[0], mac[1], mac[2], mac[3], mac[4], mac[5]);
-}

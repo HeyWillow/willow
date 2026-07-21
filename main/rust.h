@@ -12,6 +12,7 @@ intptr_t rust_config_get_char_len(const char *key);
 int64_t rust_config_get_int(const char *key);
 bool rust_config_load(void);
 bool rust_config_write(const char *data);
+void rust_get_mac_address(void);
 void rust_ip_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
                            void *event_data);
 bool rust_nvs_apply(const char *data);
