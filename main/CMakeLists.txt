@@ -5,7 +5,6 @@ endif()
 idf_component_register(
     SRC_DIRS
         "."
-        "endpoint"
         "${WILLOW_ETHERNET_SRC_DIRS}"
     INCLUDE_DIRS
         "."

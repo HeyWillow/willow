@@ -13,7 +13,6 @@
 #include "audio.h"
 #include "config.h"
 #include "display.h"
-#include "endpoint/hass.h"
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
@@ -133,7 +132,6 @@ void config_write(const char *data)
 {
     deinit_was();
     deinit_audio();
-    deinit_hass();
 
     FILE *f = fopen(CONFIG_PATH, "w");
     if (f == NULL) {
