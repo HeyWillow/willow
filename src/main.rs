@@ -10,6 +10,7 @@ mod input;
 mod logging;
 mod net;
 mod nvs;
+mod ota;
 #[cfg(esp_idf_willow_debug_runtime_stats)]
 mod runtime_stats;
 mod spiffs;

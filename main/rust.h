@@ -28,6 +28,7 @@ void rust_get_mac_address(void);
 esp_err_t rust_network_init(esp_netif_t **network_interface);
 bool rust_nvs_apply(const char *data);
 bool rust_nvs_read_was_url(char *output, size_t output_len);
+bool rust_ota_install(const char *url);
 const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
 bool rust_state_is_restarting(void);
