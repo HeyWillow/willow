@@ -8,18 +8,8 @@ enum willow_hw_t {
     WILLOW_HW_MAX, // keep this last
 };
 
-enum willow_state {
-    STATE_INIT = 0,
-    STATE_NVS_OK,
-    STATE_CONFIG_OK,
-    STATE_READY,
-};
-
 extern enum willow_hw_t hw_type;
-extern enum willow_state state;
 extern esp_periph_set_handle_t hdl_pset;
-
-extern _Atomic bool restarting;
 
 const char *str_hw_type(int id);
 void init_system(void);

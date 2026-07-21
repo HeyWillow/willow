@@ -4,6 +4,7 @@ mod config;
 mod display;
 mod ffi;
 mod i2c;
+mod state;
 mod ui;
 
 fn main() {
@@ -11,6 +12,8 @@ fn main() {
     esp_idf_svc::log::EspLogger::initialize_default();
 
     log::info!(target: "WILLOW/RUST", "entered Rust main()");
+
+    state::mark_init();
 
     if let Err(error) = audio::initialize_recorder_queue() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize recorder queue: {error}");
