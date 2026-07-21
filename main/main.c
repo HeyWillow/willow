@@ -4,7 +4,7 @@
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
 #include "lvgl.h"
-#include "nvs_flash.h"
+#include "nvs.h"
 #include "periph_spiffs.h"
 #include "sdkconfig.h"
 
@@ -86,14 +86,6 @@ void willow_init(void)
     init_ui();
 
     ESP_ERROR_CHECK(esp_netif_init());
-
-    err = nvs_flash_init();
-    if (err == ESP_ERR_NVS_NO_FREE_PAGES) {
-        // NVS partition was truncated and needs to be erased
-        // Retry nvs_flash_init
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ESP_ERROR_CHECK(nvs_flash_init());
-    }
 
 #ifdef CONFIG_WILLOW_ETHERNET
     init_ethernet();

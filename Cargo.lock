@@ -1500,7 +1500,7 @@ dependencies = [
 [[package]]
 name = "willow-schema"
 version = "0.1.0"
-source = "git+https://github.com/HeyWillow/willow-schema.git?rev=1af0ddea34b82044c5879531cc4859a8a6d8b32a#1af0ddea34b82044c5879531cc4859a8a6d8b32a"
+source = "git+https://github.com/HeyWillow/willow-schema.git?rev=1622fcfb006b62763fe62b95e10f0b82bf454ba1#1622fcfb006b62763fe62b95e10f0b82bf454ba1"
 dependencies = [
  "serde",
  "serde_repr",

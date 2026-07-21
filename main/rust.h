@@ -10,3 +10,4 @@ intptr_t rust_config_get_char_len(const char *key);
 int64_t rust_config_get_int(const char *key);
 bool rust_config_load(void);
 bool rust_config_write(const char *data);
+bool rust_nvs_apply(const char *data);

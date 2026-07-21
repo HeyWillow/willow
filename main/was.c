@@ -8,13 +8,13 @@
 #include "esp_transport_ws.h"
 #include "esp_websocket_client.h"
 #include "lvgl.h"
-#include "nvs_flash.h"
 
 #include "audio.h"
 #include "config.h"
 #include "display.h"
 #include "network.h"
 #include "ota.h"
+#include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
@@ -45,6 +45,9 @@ struct notify_data {
 
 static void notify_task(void *data);
 static void send_hello_goodbye(const char *type);
+
+// Rust validates and stores the complete shared NVS provisioning document. C
+// retains WebSocket dispatch, UI feedback, and restart coordination.
 
 static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, const int32_t id_ev, const void *ev_data)
 {
@@ -128,60 +131,13 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                 cJSON *json_nvs = cJSON_GetObjectItemCaseSensitive(cjson, "nvs");
                 if (cJSON_IsObject(json_nvs)) {
                     char *nvs = cJSON_Print(json_nvs);
-                    esp_err_t ret = ESP_OK;
-                    nvs_handle_t hdl_nvs;
-
                     ESP_LOGI(TAG, "found nvs in WebSocket message: %s", nvs);
+
+                    if (!rust_nvs_apply(nvs)) {
+                        cJSON_free(nvs);
+                        goto cleanup;
+                    }
                     cJSON_free(nvs);
-
-                    cJSON *json_was = cJSON_GetObjectItemCaseSensitive(json_nvs, "WAS");
-                    if (cJSON_IsObject(json_was)) {
-                        ESP_LOGD(TAG, "found WAS in nvs message");
-                        ret = nvs_open("WAS", NVS_READWRITE, &hdl_nvs);
-                        if (ret != ESP_OK) {
-                            ESP_LOGE(TAG, "failed to open NVS namespace WAS");
-                            goto cleanup;
-                        }
-                        cJSON *json_was_url = cJSON_GetObjectItemCaseSensitive(json_was, "URL");
-                        if (cJSON_IsString(json_was_url) && json_was_url->valuestring != NULL) {
-                            ESP_LOGD(TAG, "found WAS URL in nvs message");
-                            ret = nvs_set_str(hdl_nvs, "URL", json_was_url->valuestring);
-                            if (ret != ESP_OK) {
-                                ESP_LOGE(TAG, "failed to set URL in NVS namespace WAS");
-                                goto cleanup;
-                            }
-                        }
-                        nvs_commit(hdl_nvs);
-                    }
-
-                    cJSON *json_wifi = cJSON_GetObjectItemCaseSensitive(json_nvs, "WIFI");
-                    if (cJSON_IsObject(json_wifi)) {
-                        ESP_LOGD(TAG, "found WIFI in nvs message");
-                        ret = nvs_open("WIFI", NVS_READWRITE, &hdl_nvs);
-                        if (ret != ESP_OK) {
-                            ESP_LOGE(TAG, "failed to open NVS namespace WIFI");
-                            goto cleanup;
-                        }
-                        cJSON *json_wifi_psk = cJSON_GetObjectItemCaseSensitive(json_wifi, "PSK");
-                        if (cJSON_IsString(json_wifi_psk) && json_wifi_psk->valuestring != NULL) {
-                            ESP_LOGD(TAG, "found WIFI PSK in nvs message");
-                            ret = nvs_set_str(hdl_nvs, "PSK", json_wifi_psk->valuestring);
-                            if (ret != ESP_OK) {
-                                ESP_LOGE(TAG, "failed to set PSK in NVS namespace WIFI");
-                                goto cleanup;
-                            }
-                        }
-                        cJSON *json_wifi_ssid = cJSON_GetObjectItemCaseSensitive(json_wifi, "SSID");
-                        if (cJSON_IsString(json_wifi_ssid) && json_wifi_ssid->valuestring != NULL) {
-                            ESP_LOGD(TAG, "found WIFI SSID in nvs message");
-                            ret = nvs_set_str(hdl_nvs, "SSID", json_wifi_ssid->valuestring);
-                            if (ret != ESP_OK) {
-                                ESP_LOGE(TAG, "failed to set SSID in NVS namespace WIFI");
-                                goto cleanup;
-                            }
-                        }
-                        nvs_commit(hdl_nvs);
-                    }
 
                     ESP_LOGI(TAG, "restarting to apply NVS changes");
                     if (lvgl_port_lock(lvgl_lock_timeout)) {
