@@ -1,6 +1,12 @@
 fn main() {
     embuild::espidf::sysenv::output();
 
+    println!("cargo:rerun-if-env-changed=WILLOW_VERSION");
+    println!(
+        "cargo:rustc-env=WILLOW_VERSION={}",
+        std::env::var("WILLOW_VERSION").unwrap_or_else(|_| "0.1".to_owned())
+    );
+
     println!("cargo:rustc-check-cfg=cfg(esp_idf_willow_debug_log)");
     println!("cargo:rustc-check-cfg=cfg(esp_idf_willow_debug_mem)");
     println!("cargo:rustc-check-cfg=cfg(esp_idf_willow_debug_runtime_stats)");

@@ -1,1 +1,0 @@
-esp_http_client_handle_t init_http_client(void);
