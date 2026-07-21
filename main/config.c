@@ -1,6 +1,5 @@
 #include <limits.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -21,14 +20,12 @@
 #include "timer.h"
 #include "was.h"
 
-#define CONFIG_PATH "/spiffs/user/config/willow.json"
-
 static const char *TAG = "WILLOW/CONFIG";
 
 bool config_valid = false;
 
-// Rust owns the parsed, typed configuration. These calls only adapt it to the
-// existing C getter API while the remaining consumers are migrated.
+// Rust owns configuration filesystem I/O and the parsed, typed document. The
+// getters adapt it to the existing C API while consumers are migrated.
 
 bool config_get_bool(char *key, const bool default_value)
 {
@@ -73,17 +70,11 @@ void config_write(const char *data)
     deinit_was();
     deinit_audio();
 
-    FILE *f = fopen(CONFIG_PATH, "w");
-    if (f == NULL) {
-        ESP_LOGE(TAG, "failed to open %s", CONFIG_PATH);
-        goto close;
+    if (!rust_config_write(data)) {
+        restart_delayed();
+        return;
     }
-    fputs(data, f);
 
-close:
-    fclose(f);
-
-    ESP_LOGI(TAG, "%s updated, restarting", CONFIG_PATH);
     if (lvgl_port_lock(lvgl_lock_timeout)) {
         lv_label_set_text_static(lbl_ln3, "Configuration Updated");
         lv_obj_add_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);

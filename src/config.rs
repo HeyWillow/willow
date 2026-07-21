@@ -258,3 +258,31 @@ pub extern "C" fn rust_config_load() -> bool {
 
     true
 }
+
+/// Writes a configuration document supplied by the legacy C message handler.
+///
+/// Rust owns only the filesystem operation. C continues to coordinate service
+/// shutdown, UI feedback, and the restart around this call. The bytes are not
+/// parsed or rewritten, preserving the existing device-facing behavior.
+///
+/// # Safety
+///
+/// `data` must either be null or point to a valid NUL-terminated byte string
+/// for the duration of this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_config_write(data: *const c_char) -> bool {
+    if data.is_null() {
+        error!(target: LOG_TARGET, "cannot write a null configuration");
+        return false;
+    }
+
+    let data = unsafe { CStr::from_ptr(data) };
+    if let Err(error) = fs::write(CONFIG_PATH, data.to_bytes()) {
+        error!(target: LOG_TARGET, "failed to write {CONFIG_PATH}: {error}");
+        return false;
+    }
+
+    info!(target: LOG_TARGET, "{CONFIG_PATH} updated, restarting");
+
+    true
+}
