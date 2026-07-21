@@ -1,25 +1,19 @@
 #include <limits.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "esp_log.h"
-#include "esp_spiffs.h"
-#include "esp_system.h"
 
 #include "audio.h"
 #include "config.h"
 #include "rust.h"
-#include "shared.h"
 #include "was.h"
-
-#define CONFIG_PATH "/spiffs/user/config/willow.json"
 
 static const char *TAG = "WILLOW/CONFIG";
 
-// Rust owns the parsed, typed configuration. These calls only adapt it to the
-// existing C getter API while the remaining consumers are migrated.
+// Rust owns configuration filesystem I/O and the parsed, typed document. The
+// getters adapt it to the existing C API while consumers are migrated.
 
 bool config_get_bool(char *key, const bool default_value)
 {
@@ -59,17 +53,11 @@ void config_write(const char *data)
     deinit_was();
     deinit_audio();
 
-    FILE *f = fopen(CONFIG_PATH, "w");
-    if (f == NULL) {
-        ESP_LOGE(TAG, "failed to open %s", CONFIG_PATH);
-        goto close;
+    if (!rust_config_write(data)) {
+        rust_system_restart_delayed();
+        return;
     }
-    fputs(data, f);
 
-close:
-    fclose(f);
-
-    ESP_LOGI(TAG, "%s updated, restarting", CONFIG_PATH);
     rust_ui_show_center_message("Configuration Updated");
     rust_display_timer_reset(true);
     rust_backlight_set(true, false);

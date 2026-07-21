@@ -6,7 +6,14 @@
 //! [`config`] directly instead of extending the string-based interface.
 
 use core::ffi::c_char;
-use std::{borrow::Cow, ffi::CStr, fs, io::ErrorKind, ptr, sync::OnceLock};
+use std::{
+    borrow::Cow,
+    ffi::CStr,
+    fs,
+    io::{self, ErrorKind},
+    ptr,
+    sync::OnceLock,
+};
 
 use log::{error, info};
 use serde_json::Value;
@@ -251,4 +258,36 @@ pub(crate) fn is_valid() -> bool {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_config_is_valid() -> bool {
     is_valid()
+}
+
+/// Writes a configuration document without parsing or rewriting its bytes.
+pub(crate) fn write(data: &[u8]) -> io::Result<()> {
+    fs::write(CONFIG_PATH, data)
+}
+
+/// Writes a configuration document supplied by the retained C message handler.
+///
+/// This wrapper converts the C string and reports the filesystem result. C
+/// continues to coordinate service shutdown, UI feedback, and restart.
+///
+/// # Safety
+///
+/// `data` must either be null or point to a valid NUL-terminated byte string
+/// for the duration of this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_config_write(data: *const c_char) -> bool {
+    if data.is_null() {
+        error!(target: LOG_TARGET, "cannot write a null configuration");
+        return false;
+    }
+
+    let data = unsafe { CStr::from_ptr(data) };
+    if let Err(error) = write(data.to_bytes()) {
+        error!(target: LOG_TARGET, "failed to write {CONFIG_PATH}: {error}");
+        return false;
+    }
+
+    info!(target: LOG_TARGET, "{CONFIG_PATH} updated, restarting");
+
+    true
 }
