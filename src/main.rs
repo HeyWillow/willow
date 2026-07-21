@@ -4,6 +4,7 @@ mod logging;
 mod net;
 mod nvs;
 mod sntp;
+mod spiffs;
 mod state;
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
