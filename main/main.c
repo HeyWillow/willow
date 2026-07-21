@@ -13,7 +13,6 @@
 #include "config.h"
 #include "display.h"
 #include "input.h"
-#include "log.h"
 #include "main.h"
 #include "rust.h"
 #include "shared.h"
@@ -70,9 +69,6 @@ static esp_err_t init_spiffs_user(void)
 void willow_init(void)
 {
     esp_err_t err;
-
-    init_logging();
-    ESP_LOGI(TAG, "Starting up! Please wait...");
 
     esp_periph_config_t pcfg = DEFAULT_ESP_PERIPH_SET_CONFIG();
     hdl_pset = esp_periph_set_init(&pcfg);
