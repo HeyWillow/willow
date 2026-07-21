@@ -1,5 +1,7 @@
 //! Network initialization and event handling through ESP-IDF.
 
+#[cfg(esp_idf_willow_ethernet)]
+mod ethernet;
 mod wifi;
 
 use core::ptr;

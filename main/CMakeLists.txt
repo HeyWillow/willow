@@ -1,14 +1,8 @@
-if(CONFIG_WILLOW_ETHERNET)
-    set(WILLOW_ETHERNET_SRC_DIRS "net")
-endif()
-
 idf_component_register(
     SRC_DIRS
         "."
-        "${WILLOW_ETHERNET_SRC_DIRS}"
     INCLUDE_DIRS
         "."
-        "${WILLOW_ETHERNET_SRC_DIRS}"
     PRIV_REQUIRES
         app_update
         audio_board

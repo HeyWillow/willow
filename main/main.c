@@ -27,10 +27,6 @@
 #include "psa/crypto.h"
 #endif
 
-#if defined(CONFIG_WILLOW_ETHERNET)
-#include "net/ethernet.h"
-#endif
-
 #define DEFAULT_WIS_URL "https://infer.tovera.io/api/willow"
 
 #define I2S_PORT       I2S_NUM_0
@@ -69,6 +65,8 @@ static esp_err_t init_spiffs_user(void)
 void willow_init(void)
 {
     esp_err_t err;
+    nvs_handle_t hdl_nvs;
+    size_t sz;
 
     esp_periph_config_t pcfg = DEFAULT_ESP_PERIPH_SET_CONFIG();
     hdl_pset = esp_periph_set_init(&pcfg);
@@ -83,9 +81,14 @@ void willow_init(void)
     ESP_ERROR_CHECK(esp_netif_init());
 
 #ifdef CONFIG_WILLOW_ETHERNET
-    init_ethernet();
+    if (lvgl_port_lock(lvgl_lock_timeout)) {
+        lv_obj_clear_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
+        lv_obj_set_style_text_align(lbl_ln4, LV_TEXT_ALIGN_CENTER, 0);
+        lv_label_set_text_static(lbl_ln4, "Connecting to Ethernet ...");
+        lvgl_port_unlock();
+    }
+    ESP_ERROR_CHECK(rust_ethernet_init());
 #else
-    nvs_handle_t hdl_nvs;
     err = nvs_open("WIFI", NVS_READONLY, &hdl_nvs);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to open NVS namespace WIFI: %s", esp_err_to_name(err));
@@ -93,7 +96,7 @@ void willow_init(void)
     }
 
     char psk[64];
-    size_t sz = sizeof(psk);
+    sz = sizeof(psk);
     err = nvs_get_str(hdl_nvs, "PSK", psk, &sz);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to get PSK from NVS namespace WIFI: %s", esp_err_to_name(err));
