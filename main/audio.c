@@ -1001,6 +1001,9 @@ esp_err_t init_audio(void)
                         "Rust I2C0 master is not initialized");
     ESP_RETURN_ON_ERROR(i2c_bus_set_master_handle(I2C_NUM_0, i2c_master), TAG,
                         "failed to register Rust I2C0 master with ADF");
+    q_rec = rust_audio_recorder_queue_handle();
+    ESP_RETURN_ON_FALSE(q_rec != NULL, ESP_ERR_NO_MEM, TAG,
+                        "Rust recorder queue is not initialized");
 
     char *speech_rec_mode = config_get_char("speech_rec_mode", DEFAULT_SPEECH_REC_MODE);
     char *wake_word = config_get_char("wake_word", DEFAULT_WAKE_WORD);
@@ -1030,7 +1033,6 @@ esp_err_t init_audio(void)
 
     ESP_LOGI(TAG, "app_main() - start_rec() finished");
 
-    q_rec = xQueueCreate(3, sizeof(int));
     audio_thread_create(&hdl_at, "at_read", at_read, NULL, 4 * 1024, 5, true, 0);
 
     char wake_help[STR_WAKE_LEN] = "";

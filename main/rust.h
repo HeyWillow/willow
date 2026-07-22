@@ -9,10 +9,12 @@
 #include "esp_lcd_panel_io.h"
 #include "esp_lcd_panel_ops.h"
 #include "esp_netif.h"
+#include "freertos/queue.h"
 
 void rust_backlight_set(bool on, bool maximum);
 esp_err_t rust_backlight_strobe_start(uint32_t period_ms);
 void rust_backlight_strobe_stop(void);
+QueueHandle_t rust_audio_recorder_queue_handle(void);
 esp_err_t rust_display_timer_init(void);
 esp_err_t rust_display_timer_reset(bool pause);
 esp_err_t rust_display_init(void);
