@@ -54,7 +54,6 @@ component_dirs = [
   "deps/esp-adf/components/esp_dispatcher",
   "deps/esp-adf/components/esp_event_cast",
   "deps/esp-adf/components/esp_peripherals",
-  "deps/esp-adf/components/input_key_service",
   "deps/esp-adf/components/ota_service",
   "deps/esp-adf/components/playlist",
   "deps/esp-adf/components/tone_partition",

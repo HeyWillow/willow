@@ -11,6 +11,7 @@ struct willow_audio_response {
 typedef enum {
     MSG_STOP,
     MSG_START,
+    MSG_UNMUTE,
 } q_msg;
 
 extern audio_rec_handle_t hdl_ar;
@@ -21,7 +22,6 @@ extern QueueHandle_t q_rec;
 extern struct willow_audio_response war;
 
 void deinit_audio(void);
-void init_adc(void);
 esp_err_t init_audio(void);
 void play_audio_ok(void *data);
 esp_err_t volume_set(int volume);

@@ -21,7 +21,6 @@ idf_component_register(
         esp_http_client
         esp_peripherals
         esp_websocket_client
-        input_key_service
         spiffs
 )
 

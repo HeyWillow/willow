@@ -16,6 +16,8 @@ void rust_backlight_strobe_stop(void);
 esp_err_t rust_display_timer_init(void);
 esp_err_t rust_display_timer_reset(bool pause);
 esp_err_t rust_display_init(void);
+bool rust_input_is_muted(void);
+esp_err_t rust_input_monitor_start(int32_t unmute_event);
 bool rust_config_copy_char(const char *key, char *output, size_t output_len);
 int8_t rust_config_get_bool(const char *key);
 intptr_t rust_config_get_char_len(const char *key);

@@ -4,6 +4,7 @@ mod config;
 mod display;
 mod ffi;
 mod i2c;
+mod input;
 mod logging;
 mod spiffs;
 mod state;
@@ -26,6 +27,9 @@ fn main() {
     if let Err(error) = i2c::init() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize I2C0 master bus: {error}");
         unsafe { esp_idf_sys::esp_system_abort(c"I2C0 initialization failed".as_ptr()) }
+    }
+    if let Err(error) = input::init() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
     ffi::init();
 

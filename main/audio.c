@@ -67,6 +67,8 @@ static const char *TAG = "WILLOW/AUDIO";
 static int total_write = 0;
 struct willow_audio_response war;
 
+static void init_adc(void);
+
 static void cb_ea(esp_audio_state_t *state, void *data)
 {
     ESP_LOGD(TAG, "ESP Audio Event received: %d", state->status);
@@ -96,11 +98,10 @@ static void play_audio(const char *uri)
 
 static void check_mute(void)
 {
-    int gpio_level = gpio_get_level(GPIO_NUM_1);
-    if (gpio_level == 0) {
+    if (rust_input_is_muted()) {
         ESP_LOGW(TAG, "mute is activated, please unmute to continue startup");
         rust_ui_show_error("Mute Activated", "Unmute to continue");
-        while (gpio_get_level(GPIO_NUM_1) == 0) {
+        while (rust_input_is_muted()) {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
@@ -785,6 +786,10 @@ static void at_read(void *data)
                     // this confirms that the URL is still set correctly
                     ESP_LOGI(TAG, "Using WIS URL '%s'", audio_element_get_uri(hdl_ae_hs));
                     break;
+                case MSG_UNMUTE:
+                    ESP_LOGI(TAG, "unmute");
+                    init_adc();
+                    break;
                 case MSG_STOP:
                     delay = portMAX_DELAY;
                     audio_element_set_ringbuf_done(hdl_ae_rs_to_api);
@@ -833,7 +838,7 @@ esp_err_t volume_set(int volume)
     return audio_hal_set_volume(hdl_ahc, volume);
 }
 
-void init_adc(void)
+static void init_adc(void)
 {
     if (hdl_aha != NULL) {
         hdl_aha->audio_codec_deinitialize();
@@ -866,6 +871,10 @@ esp_err_t init_audio(void)
     esp_err_t ret = ESP_OK;
 
     check_mute();
+    ret = rust_input_monitor_start(MSG_UNMUTE);
+    if (ret != ESP_OK) {
+        ESP_LOGE(TAG, "failed to start mute input monitor: %s", esp_err_to_name(ret));
+    }
 
     hdl_ahc = audio_board_codec_init();
     gpio_set_level(get_pa_enable_gpio(), 0);
