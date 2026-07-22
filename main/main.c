@@ -22,8 +22,6 @@
 #include "ui.h"
 #include "was.h"
 
-#include "endpoint/hass.h"
-
 #ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
 #include "psa/crypto.h"
 #endif
@@ -164,14 +162,6 @@ err_nvs:
         vTaskDelay(portMAX_DELAY);
     }
 
-    bool was_mode = config_get_bool("was_mode", DEFAULT_WAS_MODE);
-    if (!was_mode) {
-        char *command_endpoint = config_get_char("command_endpoint", DEFAULT_COMMAND_ENDPOINT);
-        if (strcmp(command_endpoint, "Home Assistant") == 0) {
-            init_hass();
-        }
-        free(command_endpoint);
-    }
     init_buttons();
     init_input_key_service();
     init_audio();

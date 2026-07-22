@@ -12,7 +12,6 @@
 #include "audio.h"
 #include "config.h"
 #include "display.h"
-#include "endpoint/hass.h"
 #include "http.h"
 #include "shared.h"
 #include "slvgl.h"
@@ -184,7 +183,6 @@ void ota_start(char *url)
     display_set_backlight(true, false);
 
     deinit_audio();
-    deinit_hass();
     deinit_was();
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);

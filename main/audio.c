@@ -33,10 +33,6 @@
 #include "ui.h"
 #include "was.h"
 
-#include "endpoint/hass.h"
-#include "endpoint/openhab.h"
-#include "endpoint/rest.h"
-
 #define DEFAULT_AUDIO_CODEC         "PCM"
 #define DEFAULT_AUDIO_RESPONSE_TYPE "None"
 #define DEFAULT_RECORD_BUFFER       12
@@ -526,18 +522,7 @@ static esp_err_t hdl_ev_hs_to_api(http_stream_event_msg_t *msg)
                 lv_obj_add_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
                 lvgl_port_unlock();
             }
-            bool was_mode = config_get_bool("was_mode", DEFAULT_WAS_MODE);
-            char *command_endpoint = config_get_char("command_endpoint", DEFAULT_COMMAND_ENDPOINT);
-            if (was_mode) {
-                was_send_endpoint(buf, false);
-            } else if (strcmp(command_endpoint, "Home Assistant") == 0) {
-                hass_send(buf);
-            } else if (strcmp(command_endpoint, "openHAB") == 0) {
-                openhab_send(buf);
-            } else if (strcmp(command_endpoint, "REST") == 0) {
-                rest_send(buf);
-            }
-            free(command_endpoint);
+            was_send_endpoint(buf, false);
 
             cJSON *cjson = cJSON_Parse(buf);
             cJSON *text = cJSON_GetObjectItemCaseSensitive(cjson, "text");
