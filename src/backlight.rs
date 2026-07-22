@@ -3,13 +3,12 @@
 use std::{
     sync::{
         Mutex, OnceLock, PoisonError,
-        mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel},
+        mpsc::{Receiver, RecvTimeoutError, Sender, SyncSender, channel, sync_channel},
     },
     thread::{self, JoinHandle},
     time::Duration,
 };
 
-use esp_idf_svc::timer::{EspTaskTimerService, EspTimer};
 use esp_idf_sys::{
     ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_FAIL, ESP_OK, EspError, esp_err_t,
     gpio_num_t_GPIO_NUM_45, gpio_num_t_GPIO_NUM_47, ledc_channel_config, ledc_channel_config_t,
@@ -22,6 +21,7 @@ use log::{debug, error, info};
 
 const DEFAULT_BRIGHTNESS: u32 = 700;
 const DEFAULT_DISPLAY_TIMEOUT_SECS: u32 = 10;
+const DISPLAY_TIMER_STACK_SIZE: usize = 4_096;
 const FREQUENCY_HZ: u32 = 5_000;
 const LOG_TARGET: &str = "WILLOW/DISPLAY";
 const MAX_DUTY: u32 = 1_023;
@@ -47,8 +47,23 @@ struct Strobe {
     thread: JoinHandle<()>,
 }
 
+enum DisplayTimerAction {
+    Pause,
+    Schedule(Duration),
+}
+
+struct DisplayTimerCommand {
+    action: DisplayTimerAction,
+    acknowledge: SyncSender<()>,
+}
+
+struct DisplayTimer {
+    command: Sender<DisplayTimerCommand>,
+    _thread: JoinHandle<()>,
+}
+
 static BACKLIGHT: OnceLock<Backlight> = OnceLock::new();
-static DISPLAY_TIMER: Mutex<Option<EspTimer<'static>>> = Mutex::new(None);
+static DISPLAY_TIMER: OnceLock<DisplayTimer> = OnceLock::new();
 static STROBE: Mutex<Option<Strobe>> = Mutex::new(None);
 
 fn check(result: esp_err_t, operation: &str) -> Result<(), EspError> {
@@ -142,35 +157,92 @@ fn initialize() -> Result<(), EspError> {
     Ok(())
 }
 
+fn display_timer(commands: Receiver<DisplayTimerCommand>) {
+    let mut timeout = None;
+
+    loop {
+        let command = match timeout {
+            Some(duration) => match commands.recv_timeout(duration) {
+                Ok(command) => command,
+                Err(RecvTimeoutError::Timeout) => {
+                    info!(target: TIMER_LOG_TARGET, "Wake LCD timeout, turning off LCD");
+                    set(false, false);
+                    timeout = None;
+                    continue;
+                }
+                Err(RecvTimeoutError::Disconnected) => return,
+            },
+            None => match commands.recv() {
+                Ok(command) => command,
+                Err(_) => return,
+            },
+        };
+
+        timeout = match command.action {
+            DisplayTimerAction::Pause => None,
+            DisplayTimerAction::Schedule(duration) => Some(duration),
+        };
+        let _ = command.acknowledge.send(());
+    }
+}
+
 fn initialize_display_timer() -> Result<(), EspError> {
-    let mut display_timer = DISPLAY_TIMER.lock().unwrap_or_else(PoisonError::into_inner);
-    if display_timer.is_some() {
+    if DISPLAY_TIMER.get().is_some() {
         return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
     }
 
-    let timer_service = EspTaskTimerService::new()?;
-    *display_timer = Some(timer_service.timer(|| {
-        info!(target: TIMER_LOG_TARGET, "Wake LCD timeout, turning off LCD");
-        set(false, false);
-    })?);
+    let (command, commands) = channel();
+    let timer_thread = thread::Builder::new()
+        .name("display_timer".into())
+        .stack_size(DISPLAY_TIMER_STACK_SIZE)
+        .spawn(move || display_timer(commands))
+        .map_err(|error| {
+            error!(target: TIMER_LOG_TARGET, "failed to start display timer task: {error}");
+            EspError::from_infallible::<ESP_FAIL>()
+        })?;
 
-    Ok(())
+    DISPLAY_TIMER
+        .set(DisplayTimer {
+            command,
+            _thread: timer_thread,
+        })
+        .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_STATE>())
 }
 
 fn reset_display_timer(pause: bool) -> Result<(), EspError> {
-    let display_timer = DISPLAY_TIMER.lock().unwrap_or_else(PoisonError::into_inner);
-    let Some(display_timer) = display_timer.as_ref() else {
+    let Some(display_timer) = DISPLAY_TIMER.get() else {
         return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
     };
 
-    if pause {
-        display_timer.cancel().map(|_| ())
+    let action = if pause {
+        DisplayTimerAction::Pause
     } else {
         let timeout_secs = crate::config::config()
             .and_then(|configuration| configuration.display_timeout)
             .unwrap_or(DEFAULT_DISPLAY_TIMEOUT_SECS);
-        display_timer.after(Duration::from_secs(u64::from(timeout_secs)))
-    }
+        DisplayTimerAction::Schedule(Duration::from_secs(u64::from(timeout_secs)))
+    };
+
+    // A one-slot channel lets the worker publish its acknowledgement without
+    // rendezvous spinning at a higher FreeRTOS priority than the caller.
+    let (acknowledge, acknowledgement) = sync_channel(1);
+    display_timer
+        .command
+        .send(DisplayTimerCommand {
+            action,
+            acknowledge,
+        })
+        .map_err(|error| {
+            error!(target: TIMER_LOG_TARGET, "failed to reset display timer: {error}");
+            EspError::from_infallible::<ESP_FAIL>()
+        })?;
+
+    // C may update the backlight immediately after this returns. Wait until
+    // the worker has canceled the old deadline or installed the new one.
+    acknowledgement.recv().map_err(|error| {
+        error!(target: TIMER_LOG_TARGET, "display timer reset was not acknowledged: {error}");
+        EspError::from_infallible::<ESP_FAIL>()
+    })
 }
 
 fn set(on: bool, maximum: bool) {
@@ -274,7 +346,7 @@ pub extern "C" fn rust_backlight_set(on: bool, maximum: bool) {
     set(on, maximum);
 }
 
-/// Creates and retains the one-shot display timeout timer.
+/// Creates and retains the display timeout worker.
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_display_timer_init() -> esp_err_t {
     match initialize_display_timer() {
