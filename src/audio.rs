@@ -1,6 +1,5 @@
 //! Rust-owned coordination resources for the retained C audio engine.
 
-use core::ptr;
 use std::sync::OnceLock;
 
 use esp_idf_svc::hal::task::queue::Queue;
@@ -26,11 +25,15 @@ pub(crate) fn initialize_recorder_queue() -> Result<(), EspError> {
         .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_STATE>())
 }
 
+pub(crate) fn send_recorder_event(event: i32, timeout: u32) -> Result<(), EspError> {
+    let recorder_queue = RECORDER_QUEUE
+        .get()
+        .ok_or_else(EspError::from_infallible::<ESP_ERR_INVALID_STATE>)?;
+    recorder_queue.send_back(event, timeout).map(|_| ())
+}
+
 /// Returns the Rust-owned recorder queue as a borrowed FreeRTOS handle.
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_audio_recorder_queue_handle() -> QueueHandle_t {
-    RECORDER_QUEUE
-        .get()
-        .map(Queue::as_raw)
-        .unwrap_or(ptr::null_mut())
+    RECORDER_QUEUE.get().map(Queue::as_raw).unwrap_or_default()
 }

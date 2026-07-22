@@ -5,7 +5,6 @@
   "exclude": [
     ".clang-format",
     "LICENSE.md",
-    "dependencies.lock",
-    "main/lv_img_hand_left.c"
+    "dependencies.lock"
   ]
 }

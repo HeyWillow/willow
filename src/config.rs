@@ -43,7 +43,6 @@ fn bool_value(config: &Config, key: &str) -> Option<bool> {
 /// configuration numbers are unsigned in the shared schema.
 fn int_value(config: &Config, key: &str) -> Option<i64> {
     match key {
-        "lvgl_lock_timeout" => config.lvgl_lock_timeout.map(i64::from),
         "mic_gain" => config.mic_gain.map(i64::from),
         "record_buffer" => config.record_buffer.map(i64::from),
         "speaker_volume" => config.speaker_volume.map(i64::from),

@@ -3,17 +3,16 @@
 #include "esp_err.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "esp_lvgl_port.h"
 #include "esp_ota_ops.h"
 #include "esp_task_wdt.h"
 #include "esp_timer.h"
-#include "lvgl.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 #include "audio.h"
 #include "http.h"
 #include "rust.h"
 #include "shared.h"
-#include "slvgl.h"
 #include "system.h"
 #include "was.h"
 
@@ -148,20 +147,14 @@ void ota_task(void *data)
     }
 
     ESP_LOGI(TAG, "OTA completed, restarting");
-    if (lvgl_port_lock(lvgl_lock_timeout)) {
-        lv_label_set_text_static(lbl_ln3, "Upgrade Done");
-        lvgl_port_unlock();
-    }
+    rust_ui_show_center_message("Upgrade Done");
     restart_delayed();
 err:
     esp_ota_abort(hdl_ota);
     esp_http_client_close(hdl_hc);
     esp_http_client_cleanup(hdl_hc);
     ESP_LOGI(TAG, "OTA failed, restarting");
-    if (lvgl_port_lock(lvgl_lock_timeout)) {
-        lv_label_set_text_static(lbl_ln3, "Upgrade Failed");
-        lvgl_port_unlock();
-    }
+    rust_ui_show_center_message("Upgrade Failed");
     restart_delayed();
     vTaskDelete(NULL);
 }
@@ -169,15 +162,7 @@ err:
 void ota_start(char *url)
 {
     rust_display_timer_reset(true);
-    if (lvgl_port_lock(lvgl_lock_timeout)) {
-        lv_obj_add_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(lbl_ln2, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(lbl_ln5, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_text_static(lbl_ln3, "Starting Upgrade");
-        lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
-        lvgl_port_unlock();
-    }
+    rust_ui_show_center_message("Starting Upgrade");
     rust_backlight_set(true, false);
 
     deinit_audio();

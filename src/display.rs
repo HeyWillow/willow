@@ -1,8 +1,7 @@
 //! SPI2 and ST7789 display panel ownership.
 //!
 //! Rust retains the panel and IO resources for the firmware lifetime. The
-//! existing C LVGL setup borrows their raw ESP-IDF handles without taking
-//! ownership.
+//! Rust UI borrows their raw ESP-IDF handles without taking ownership.
 
 use core::ptr;
 use std::sync::OnceLock;
@@ -104,6 +103,10 @@ impl Drop for Display {
 }
 
 static DISPLAY: OnceLock<Display> = OnceLock::new();
+
+pub(crate) fn handles() -> Option<(esp_lcd_panel_io_handle_t, esp_lcd_panel_handle_t)> {
+    DISPLAY.get().map(|display| (display.io(), display.panel()))
+}
 
 fn check(result: esp_err_t, operation: &str) -> Result<(), EspError> {
     if let Some(error) = EspError::from(result) {
@@ -254,16 +257,4 @@ pub extern "C" fn rust_display_init() -> esp_err_t {
         Ok(()) => ESP_OK,
         Err(error) => error.code(),
     }
-}
-
-/// Returns a borrowed panel IO handle owned by Rust for the firmware lifetime.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_display_io_handle() -> esp_lcd_panel_io_handle_t {
-    DISPLAY.get().map(Display::io).unwrap_or_default()
-}
-
-/// Returns a borrowed panel handle owned by Rust for the firmware lifetime.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_display_panel_handle() -> esp_lcd_panel_handle_t {
-    DISPLAY.get().map(Display::panel).unwrap_or_default()
 }

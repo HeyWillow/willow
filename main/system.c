@@ -1,14 +1,14 @@
+#include <stdio.h>
+
 #include "esp_event.h"
 #include "esp_log.h"
-#include "esp_lvgl_port.h"
 #include "esp_random.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
-#include "lvgl.h"
 #include "sdkconfig.h"
 
+#include "rust.h"
 #include "shared.h"
-#include "slvgl.h"
 #include "system.h"
 
 static const char *TAG = "WILLOW/SYSTEM";
@@ -71,11 +71,9 @@ void restart_delayed(void)
 
     ESP_LOGI(TAG, "restarting after %" PRIu32 " seconds", delay);
 
-    if (lvgl_port_lock(lvgl_lock_timeout)) {
-        lv_label_set_text_fmt(lbl_ln4, "Restarting in %" PRIu32 " seconds", delay);
-        lv_obj_clear_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-        lvgl_port_unlock();
-    }
+    char message[32];
+    snprintf(message, sizeof(message), "Restarting in %" PRIu32 " seconds", delay);
+    rust_ui_show_connecting(message);
 
     delay *= 1000;
     vTaskDelay(delay / portTICK_PERIOD_MS);

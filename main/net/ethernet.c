@@ -1,15 +1,13 @@
 #include "esp_log.h"
-#include "esp_lvgl_port.h"
 #include "esp_wifi.h"
-#include "lvgl.h"
 #include "sdkconfig.h"
-#include "slvgl.h"
 
 #include "driver/spi_master.h"
 #include "esp_eth.h"
 #include "esp_mac.h"
 
 #include "network.h"
+#include "rust.h"
 #include "shared.h"
 
 #define WILLOW_ETHERNET_CS        10
@@ -86,12 +84,7 @@ esp_err_t init_ethernet(void)
     init_sntp();
 
     // Start Ethernet
-    if (lvgl_port_lock(lvgl_lock_timeout)) {
-        lv_obj_clear_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_text_align(lbl_ln4, LV_TEXT_ALIGN_CENTER, 0);
-        lv_label_set_text_static(lbl_ln4, "Connecting to Ethernet ...");
-        lvgl_port_unlock();
-    }
+    rust_ui_show_connecting("Connecting to Ethernet ...");
 
     // Create instance(s) of esp-netif for SPI Ethernet(s)
     esp_netif_inherent_config_t esp_netif_config = ESP_NETIF_INHERENT_DEFAULT_ETH();

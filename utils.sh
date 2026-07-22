@@ -492,11 +492,6 @@ clang-format)
     find main/ -name '*.c' -or -name '*.h' -exec clang-format-15 -i {} +
 ;;
 
-convert-font)
-    lv_font_conv --format bin --lcd --bpp 4 --no-compress --size 28 --font "$2" \
-        -r 0x20-0x20CF -o spiffs/ui/font.bin
-;;
-
 addr2line)
     shift
     xtensa-esp32s3-elf-addr2line -e /willow/build/willow.elf "$@"

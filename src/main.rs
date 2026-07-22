@@ -4,6 +4,7 @@ mod config;
 mod display;
 mod ffi;
 mod i2c;
+mod ui;
 
 fn main() {
     esp_idf_sys::link_patches();

@@ -218,7 +218,7 @@ fn initialize_display_timer() -> Result<(), EspError> {
         .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_STATE>())
 }
 
-fn reset_display_timer(pause: bool) -> Result<(), EspError> {
+pub(crate) fn reset_display_timer(pause: bool) -> Result<(), EspError> {
     let Some(display_timer) = DISPLAY_TIMER.get() else {
         return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
     };
@@ -253,7 +253,7 @@ fn reset_display_timer(pause: bool) -> Result<(), EspError> {
     }
 }
 
-fn set(on: bool, maximum: bool) {
+pub(crate) fn set(on: bool, maximum: bool) {
     let Some(backlight) = BACKLIGHT.get() else {
         error!(target: LOG_TARGET, "backlight is not initialized");
         return;

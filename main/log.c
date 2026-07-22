@@ -23,7 +23,6 @@ void init_logging(void)
     esp_log_level_set("WILLOW/HTTP", WILLOW_LOG_LEVEL);
     esp_log_level_set("WILLOW/I2C", WILLOW_LOG_LEVEL);
     esp_log_level_set("WILLOW/INPUT", WILLOW_LOG_LEVEL);
-    esp_log_level_set("WILLOW/LVGL", WILLOW_LOG_LEVEL);
     esp_log_level_set("WILLOW/MAIN", WILLOW_LOG_LEVEL);
     esp_log_level_set("WILLOW/NETWORK", WILLOW_LOG_LEVEL);
     esp_log_level_set("WILLOW/OPENHAB", WILLOW_LOG_LEVEL);
