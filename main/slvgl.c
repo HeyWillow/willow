@@ -7,11 +7,9 @@
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
 #include "lvgl.h"
-#include "periph_lcd.h"
 
 #include "audio.h"
 #include "config.h"
-#include "display.h"
 #include "i2c.h"
 #include "rust.h"
 #include "system.h"
@@ -20,35 +18,15 @@
 
 static const char *TAG = "WILLOW/LVGL";
 
-// this is absolutely horrendous but lvgl_port_esp32 requires esp_lcd_panel_io_handle_t and esp-adf does not expose this
-typedef struct periph_lcd {
-    void *io_bus;
-    get_lcd_io_bus new_panel_io;
-    esp_lcd_panel_io_spi_config_t lcd_io_cfg;
-    get_lcd_panel new_lcd_panel;
-    esp_lcd_panel_dev_config_t lcd_dev_cfg;
-
-    esp_lcd_panel_io_handle_t lcd_io_handle;
-    esp_lcd_panel_handle_t lcd_panel_handle;
-
-    perph_lcd_rest rest_cb;
-    void *rest_cb_ctx;
-    bool lcd_swap_xy;
-    bool lcd_mirror_x;
-    bool lcd_mirror_y;
-    bool lcd_color_invert;
-} periph_lcd_t;
-
 enum esp32_s3_box_touch_t {
     TOUCH_GT911,
     TOUCH_TT21100,
 };
-esp_lcd_panel_handle_t hdl_lcd = NULL;
 int lvgl_lock_timeout;
 lv_disp_t *ld;
 lv_obj_t *btn_cancel, *lbl_btn_cancel, *lbl_ln1, *lbl_ln2, *lbl_ln3, *lbl_ln4, *lbl_ln5;
 
-static periph_lcd_t *lcdp;
+static esp_lcd_panel_io_handle_t hdl_touch_io;
 
 void cb_btn_cancel(lv_event_t *ev)
 {
@@ -87,18 +65,14 @@ esp_err_t init_lvgl_display(void)
         return ret;
     }
 
-    // get peripheral handle for LCD
-    esp_periph_handle_t hdl_plcd = esp_periph_set_get_by_id(hdl_pset, PERIPH_ID_LCD);
-
-    // get data for LCD peripheral
-    lcdp = esp_periph_get_data(hdl_plcd);
-
-    if (lcdp == NULL || lcdp->lcd_io_handle == NULL) {
-        ESP_LOGE(TAG, "failed to get LCD IO handle");
+    esp_lcd_panel_io_handle_t hdl_lcd_io = rust_display_io_handle();
+    esp_lcd_panel_handle_t hdl_lcd = rust_display_panel_handle();
+    if (hdl_lcd_io == NULL || hdl_lcd == NULL) {
+        ESP_LOGE(TAG, "failed to borrow Rust display handles");
         return ESP_FAIL;
     }
 
-    ESP_LOGD(TAG, "init_lvgl: lcdp->lcd_io_handle: %p", lcdp->lcd_io_handle);
+    ESP_LOGD(TAG, "init_lvgl: display IO handle: %p", hdl_lcd_io);
 
     const lvgl_port_display_cfg_t cfg_ld = {
         .buffer_size = LCD_H_RES * LCD_V_RES,
@@ -110,8 +84,7 @@ esp_err_t init_lvgl_display(void)
             .buff_spiram = true,
         },
         .hres = LCD_H_RES,
-        // confirmed this is correct by printf %p periph_lcd->lcd_io_handle in esp_peripherals/periph_lcd.c
-        .io_handle = lcdp->lcd_io_handle,
+        .io_handle = hdl_lcd_io,
         .monochrome = false,
         .panel_handle = hdl_lcd,
         .rotation = {
@@ -196,7 +169,7 @@ esp_err_t init_lvgl_touch(void)
 
     cfg_io_lt.scl_speed_hz = 400000;
 
-    ret = esp_lcd_new_panel_io_i2c_v2(i2c_bus_get_master_handle(I2C_NUM_0), &cfg_io_lt, &lcdp->lcd_io_handle);
+    ret = esp_lcd_new_panel_io_i2c_v2(i2c_bus_get_master_handle(I2C_NUM_0), &cfg_io_lt, &hdl_touch_io);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "failed to initialize display panel IO: %s", esp_err_to_name(ret));
         return ret;
@@ -205,13 +178,13 @@ esp_err_t init_lvgl_touch(void)
     esp_lcd_touch_handle_t hdl_lt = NULL;
 
     if (touch_type == TOUCH_GT911) {
-        ret = esp_lcd_touch_new_i2c_gt911(lcdp->lcd_io_handle, &cfg_lt, &hdl_lt);
+        ret = esp_lcd_touch_new_i2c_gt911(hdl_touch_io, &cfg_lt, &hdl_lt);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "failed to initialize GT911 touch screen: %s", esp_err_to_name(ret));
             return ret;
         }
     } else if (touch_type == TOUCH_TT21100) {
-        ret = esp_lcd_touch_new_i2c_tt21100(lcdp->lcd_io_handle, &cfg_lt, &hdl_lt);
+        ret = esp_lcd_touch_new_i2c_tt21100(hdl_touch_io, &cfg_lt, &hdl_lt);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "failed to initialize TT21100 touch screen: %s", esp_err_to_name(ret));
             return ret;

@@ -5,14 +5,18 @@
 #include <stdint.h>
 
 #include "esp_err.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_ops.h"
 #include "esp_netif.h"
 
-esp_err_t rust_backlight_init(void);
 void rust_backlight_set(bool on, bool maximum);
 esp_err_t rust_backlight_strobe_start(uint32_t period_ms);
 void rust_backlight_strobe_stop(void);
 esp_err_t rust_display_timer_init(void);
 esp_err_t rust_display_timer_reset(bool pause);
+esp_err_t rust_display_init(void);
+esp_lcd_panel_io_handle_t rust_display_io_handle(void);
+esp_lcd_panel_handle_t rust_display_panel_handle(void);
 bool rust_config_copy_char(const char *key, char *output, size_t output_len);
 int8_t rust_config_get_bool(const char *key);
 intptr_t rust_config_get_char_len(const char *key);

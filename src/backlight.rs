@@ -99,7 +99,7 @@ fn duties(brightness: u32) -> Result<Backlight, EspError> {
     })
 }
 
-fn initialize() -> Result<(), EspError> {
+pub(crate) fn initialize() -> Result<(), EspError> {
     if BACKLIGHT.get().is_some() {
         return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
     }
@@ -329,15 +329,6 @@ fn stop_strobe() {
         error!(target: LOG_TARGET, "backlight strobe task panicked");
     }
     set(true, false);
-}
-
-/// Configures and takes ownership of the LCD backlight PWM hardware.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_backlight_init() -> esp_err_t {
-    match initialize() {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
-    }
 }
 
 /// Selects the configured, maximum, or off backlight duty.

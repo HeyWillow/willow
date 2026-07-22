@@ -8,7 +8,6 @@
 
 #include "audio.h"
 #include "config.h"
-#include "display.h"
 #include "input.h"
 #include "main.h"
 #include "rust.h"
@@ -41,7 +40,7 @@ void willow_init(void)
     init_system();
     (void)rust_spiffs_mount();
     config_parse();
-    init_display();
+    ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_init());
     init_lvgl_display();
     init_ui();
 
