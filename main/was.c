@@ -11,7 +11,6 @@
 
 #include "audio.h"
 #include "config.h"
-#include "display.h"
 #include "ota.h"
 #include "rust.h"
 #include "shared.h"
@@ -616,7 +615,7 @@ void cb_btn_cancel_notify(lv_event_t *ev)
 
 static void notify_task(void *data)
 {
-    TaskHandle_t hdl_task_strobe = NULL;
+    bool strobe_started = false;
     cJSON *cjson = NULL;
     char *json = NULL;
     esp_err_t ret;
@@ -657,9 +656,12 @@ static void notify_task(void *data)
     rust_backlight_set(nd->backlight, nd->backlight_max);
 
     if (nd->strobe_period_ms > 0) {
-        willow_strobe_parms_t *wsp = (willow_strobe_parms_t *)calloc(1, sizeof(willow_strobe_parms_t));
-        wsp->period_ms = nd->strobe_period_ms;
-        xTaskCreatePinnedToCore(display_backlight_strobe_task, "strobe_task", 2048, wsp, 5, &hdl_task_strobe, 0);
+        ret = rust_backlight_strobe_start((uint32_t)nd->strobe_period_ms);
+        if (ret == ESP_OK) {
+            strobe_started = true;
+        } else {
+            ESP_LOGE(TAG, "failed to start display backlight strobe: %s", esp_err_to_name(ret));
+        }
     }
 
     if (nd->audio_url != NULL) {
@@ -697,9 +699,8 @@ static void notify_task(void *data)
     reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), false);
 
 out:
-    if (hdl_task_strobe != NULL) {
-        vTaskDelete(hdl_task_strobe);
-        rust_backlight_set(true, false);
+    if (strobe_started) {
+        rust_backlight_strobe_stop();
     }
 
     if (nd->id == 1) {

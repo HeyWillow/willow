@@ -1,9 +1,16 @@
 //! LCD backlight PWM ownership and the temporary C-facing control API.
 
-use std::sync::OnceLock;
+use std::{
+    sync::{
+        Mutex, OnceLock, PoisonError,
+        mpsc::{Receiver, RecvTimeoutError, SyncSender, sync_channel},
+    },
+    thread::{self, JoinHandle},
+    time::Duration,
+};
 
 use esp_idf_sys::{
-    ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_OK, EspError, esp_err_t,
+    ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_FAIL, ESP_OK, EspError, esp_err_t,
     gpio_num_t_GPIO_NUM_45, gpio_num_t_GPIO_NUM_47, ledc_channel_config, ledc_channel_config_t,
     ledc_channel_t_LEDC_CHANNEL_1, ledc_fade_func_install, ledc_intr_type_t_LEDC_INTR_DISABLE,
     ledc_mode_t_LEDC_LOW_SPEED_MODE, ledc_set_duty_and_update, ledc_timer_bit_t_LEDC_TIMER_10_BIT,
@@ -16,6 +23,8 @@ const DEFAULT_BRIGHTNESS: u32 = 700;
 const FREQUENCY_HZ: u32 = 5_000;
 const LOG_TARGET: &str = "WILLOW/DISPLAY";
 const MAX_DUTY: u32 = 1_023;
+const MIN_STROBE_PERIOD_MS: u32 = 20;
+const STROBE_STACK_SIZE: usize = 3_072;
 
 const BACKLIGHT_GPIO: i32 = if cfg!(esp_idf_esp32_s3_box_3_board) {
     gpio_num_t_GPIO_NUM_47
@@ -30,7 +39,13 @@ struct Backlight {
     on: u32,
 }
 
+struct Strobe {
+    stop: SyncSender<()>,
+    thread: JoinHandle<()>,
+}
+
 static BACKLIGHT: OnceLock<Backlight> = OnceLock::new();
+static STROBE: Mutex<Option<Strobe>> = Mutex::new(None);
 
 fn check(result: esp_err_t, operation: &str) -> Result<(), EspError> {
     if let Some(error) = EspError::from(result) {
@@ -123,18 +138,7 @@ fn initialize() -> Result<(), EspError> {
     Ok(())
 }
 
-/// Configures and takes ownership of the LCD backlight PWM hardware.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_backlight_init() -> esp_err_t {
-    match initialize() {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
-    }
-}
-
-/// Selects the configured, maximum, or off backlight duty.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_backlight_set(on: bool, maximum: bool) {
+fn set(on: bool, maximum: bool) {
     let Some(backlight) = BACKLIGHT.get() else {
         error!(target: LOG_TARGET, "backlight is not initialized");
         return;
@@ -160,4 +164,92 @@ pub extern "C" fn rust_backlight_set(on: bool, maximum: bool) {
         },
         "failed to set display backlight duty",
     );
+}
+
+fn strobe(period: Duration, stop: Receiver<()>) {
+    log::info!(
+        target: LOG_TARGET,
+        "starting display backlight strobe effect with period '{}'",
+        period.as_millis()
+    );
+
+    loop {
+        set(true, true);
+        if !matches!(stop.recv_timeout(period), Err(RecvTimeoutError::Timeout)) {
+            break;
+        }
+
+        set(false, false);
+        if !matches!(stop.recv_timeout(period), Err(RecvTimeoutError::Timeout)) {
+            break;
+        }
+    }
+}
+
+fn start_strobe(period_ms: u32) -> Result<(), EspError> {
+    let mut active = STROBE.lock().unwrap_or_else(PoisonError::into_inner);
+    if active.is_some() {
+        return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
+    }
+
+    let period = Duration::from_millis(u64::from(period_ms.max(MIN_STROBE_PERIOD_MS)));
+    let (stop_sender, stop_receiver) = sync_channel(1);
+    let strobe_thread = thread::Builder::new()
+        .name("strobe_task".into())
+        .stack_size(STROBE_STACK_SIZE)
+        .spawn(move || strobe(period, stop_receiver))
+        .map_err(|error| {
+            error!(target: LOG_TARGET, "failed to start backlight strobe task: {error}");
+            EspError::from_infallible::<ESP_FAIL>()
+        })?;
+
+    *active = Some(Strobe {
+        stop: stop_sender,
+        thread: strobe_thread,
+    });
+
+    Ok(())
+}
+
+fn stop_strobe() {
+    let mut active = STROBE.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(strobe) = active.take() else {
+        return;
+    };
+
+    let _ = strobe.stop.send(());
+    if strobe.thread.join().is_err() {
+        error!(target: LOG_TARGET, "backlight strobe task panicked");
+    }
+    set(true, false);
+}
+
+/// Configures and takes ownership of the LCD backlight PWM hardware.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_backlight_init() -> esp_err_t {
+    match initialize() {
+        Ok(()) => ESP_OK,
+        Err(error) => error.code(),
+    }
+}
+
+/// Selects the configured, maximum, or off backlight duty.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_backlight_set(on: bool, maximum: bool) {
+    set(on, maximum);
+}
+
+/// Starts a Rust-owned task that alternates the maximum and off duties.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_backlight_strobe_start(period_ms: u32) -> esp_err_t {
+    match start_strobe(period_ms) {
+        Ok(()) => ESP_OK,
+        Err(error) => error.code(),
+    }
+}
+
+/// Stops the active strobe task and restores the configured brightness.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_backlight_strobe_stop() {
+    stop_strobe();
 }

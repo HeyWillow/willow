@@ -9,6 +9,8 @@
 
 esp_err_t rust_backlight_init(void);
 void rust_backlight_set(bool on, bool maximum);
+esp_err_t rust_backlight_strobe_start(uint32_t period_ms);
+void rust_backlight_strobe_stop(void);
 bool rust_config_copy_char(const char *key, char *output, size_t output_len);
 int8_t rust_config_get_bool(const char *key);
 intptr_t rust_config_get_char_len(const char *key);
