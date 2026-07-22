@@ -2,6 +2,7 @@ mod backlight;
 mod config;
 mod display;
 mod ffi;
+mod i2c;
 mod logging;
 mod net;
 mod nvs;
@@ -33,6 +34,10 @@ fn main() {
     let _system_event_loop =
         EspSystemEventLoop::take().expect("failed to initialize default event loop");
 
+    if let Err(error) = i2c::init() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize I2C0 master bus: {error}");
+        unsafe { esp_idf_sys::esp_system_abort(c"I2C0 initialization failed".as_ptr()) }
+    }
     ffi::init();
 
     #[cfg(esp_idf_willow_debug_runtime_stats)]

@@ -6,7 +6,6 @@
 #include "lvgl.h"
 #include "sdkconfig.h"
 
-#include "i2c.h"
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
@@ -46,7 +45,6 @@ static void set_hw_type(void)
 void init_system(void)
 {
     set_hw_type();
-    init_i2c();
 }
 
 void restart_delayed(void)

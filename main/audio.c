@@ -15,6 +15,7 @@
 #include "filter_resample.h"
 #include "flac_decoder.h"
 #include "http_stream.h"
+#include "i2c_bus.h"
 #include "i2s_stream.h"
 #include "lvgl.h"
 #include "model_path.h"
@@ -995,6 +996,12 @@ void init_adc(void)
 
 esp_err_t init_audio(void)
 {
+    i2c_master_bus_handle_t i2c_master = rust_i2c_master_handle();
+    ESP_RETURN_ON_FALSE(i2c_master != NULL, ESP_ERR_INVALID_STATE, TAG,
+                        "Rust I2C0 master is not initialized");
+    ESP_RETURN_ON_ERROR(i2c_bus_set_master_handle(I2C_NUM_0, i2c_master), TAG,
+                        "failed to register Rust I2C0 master with ADF");
+
     char *speech_rec_mode = config_get_char("speech_rec_mode", DEFAULT_SPEECH_REC_MODE);
     char *wake_word = config_get_char("wake_word", DEFAULT_WAKE_WORD);
     esp_err_t ret = ESP_OK;
