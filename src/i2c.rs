@@ -1,8 +1,7 @@
 //! I2C0 master bus ownership.
 //!
 //! Rust retains the native ESP-IDF bus for the firmware lifetime. The existing
-//! C touch and ADF codec paths borrow its handle while those components are
-//! migrated independently.
+//! Rust touch and the retained ADF codec paths borrow its handle.
 
 use core::ptr;
 use std::sync::OnceLock;
@@ -42,6 +41,18 @@ impl Drop for I2cBus {
 }
 
 static I2C_BUS: OnceLock<I2cBus> = OnceLock::new();
+
+pub(crate) fn handle() -> Option<i2c_master_bus_handle_t> {
+    I2C_BUS.get().map(I2cBus::handle)
+}
+
+pub(crate) fn probe(address: u16) -> esp_err_t {
+    let Some(bus) = I2C_BUS.get() else {
+        return ESP_ERR_INVALID_STATE;
+    };
+
+    unsafe { i2c_master_probe(bus.handle(), address, PROBE_TIMEOUT_MS) }
+}
 
 fn check(result: esp_err_t, operation: &str) -> Result<(), EspError> {
     if let Some(error) = EspError::from(result) {
@@ -90,15 +101,11 @@ pub fn init() -> Result<(), EspError> {
 /// Returns a borrowed I2C0 master handle owned by Rust for the firmware lifetime.
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_i2c_master_handle() -> i2c_master_bus_handle_t {
-    I2C_BUS.get().map(I2cBus::handle).unwrap_or(ptr::null_mut())
+    handle().unwrap_or_default()
 }
 
 /// Probes a seven-bit address on the Rust-owned I2C0 bus.
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_i2c_probe(address: u16) -> esp_err_t {
-    let Some(bus) = I2C_BUS.get() else {
-        return ESP_ERR_INVALID_STATE;
-    };
-
-    unsafe { i2c_master_probe(bus.handle(), address, PROBE_TIMEOUT_MS) }
+    probe(address)
 }

@@ -1,21 +1,17 @@
 #include "board.h"
 #include "cJSON.h"
 #include "esp_log.h"
-#include "esp_lvgl_port.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_transport_ws.h"
 #include "esp_websocket_client.h"
-#include "lvgl.h"
 
 #include "audio.h"
 #include "config.h"
 #include "ota.h"
 #include "rust.h"
 #include "shared.h"
-#include "slvgl.h"
 #include "system.h"
-#include "ui.h"
 #include "was.h"
 
 #define WAS_RECONNECT_TIMEOUT_MS 10 * 1000
@@ -56,11 +52,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
             if (!config_valid) {
                 request_config();
             }
-            if (lvgl_port_lock(lvgl_lock_timeout)) {
-                lv_obj_add_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_set_style_text_align(lbl_ln4, LV_TEXT_ALIGN_LEFT, 0);
-                lvgl_port_unlock();
-            }
+            rust_ui_hide_connecting();
             break;
         case WEBSOCKET_EVENT_DATA:
             ESP_LOGV(TAG, "WebSocket data received");
@@ -91,25 +83,15 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                     cJSON *ok = cJSON_GetObjectItemCaseSensitive(json_result, "ok");
                     if (ok != NULL && cJSON_IsBool(ok)) {
                         cJSON *speech = cJSON_GetObjectItemCaseSensitive(json_result, "speech");
-                        if (lvgl_port_lock(lvgl_lock_timeout)) {
-                            lv_obj_clear_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-                            lv_obj_clear_flag(lbl_ln5, LV_OBJ_FLAG_HIDDEN);
-                            lv_obj_set_style_text_align(lbl_ln4, LV_TEXT_ALIGN_LEFT, 0);
-                            lv_obj_set_style_text_align(lbl_ln5, LV_TEXT_ALIGN_LEFT, 0);
-                            lv_obj_remove_event_cb(lbl_ln4, cb_btn_cancel);
-                            if (cJSON_IsString(speech) && speech->valuestring != NULL
-                                && strlen(speech->valuestring) > 0) {
-                                cJSON_IsTrue(ok) ? war.fn_ok(speech->valuestring) : war.fn_err(speech->valuestring);
-                                lv_label_set_text_static(lbl_ln4, "Response:");
-                                lv_label_set_text(lbl_ln5, speech->valuestring);
-                            } else {
-                                cJSON_IsTrue(ok) ? war.fn_ok("Success") : war.fn_err("Error");
-                                lv_label_set_text_static(lbl_ln4, "Command status:");
-                                lv_label_set_text(lbl_ln5, cJSON_IsTrue(ok) ? "Success!" : "Error");
-                            }
-                            lvgl_port_unlock();
-                            rust_display_timer_reset(false);
+                        if (cJSON_IsString(speech) && speech->valuestring != NULL
+                            && strlen(speech->valuestring) > 0) {
+                            cJSON_IsTrue(ok) ? war.fn_ok(speech->valuestring) : war.fn_err(speech->valuestring);
+                            rust_ui_show_command_result("Response:", speech->valuestring);
+                        } else {
+                            cJSON_IsTrue(ok) ? war.fn_ok("Success") : war.fn_err("Error");
+                            rust_ui_show_command_result("Command status:", cJSON_IsTrue(ok) ? "Success!" : "Error");
                         }
+                        rust_display_timer_reset(false);
                     }
                     goto cleanup;
                 }
@@ -135,15 +117,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                     cJSON_free(nvs);
 
                     ESP_LOGI(TAG, "restarting to apply NVS changes");
-                    if (lvgl_port_lock(lvgl_lock_timeout)) {
-                        lv_label_set_text_static(lbl_ln3, "Connectivity Updated");
-                        lv_obj_add_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
-                        lv_obj_add_flag(lbl_ln2, LV_OBJ_FLAG_HIDDEN);
-                        lv_obj_add_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-                        lv_obj_add_flag(lbl_ln5, LV_OBJ_FLAG_HIDDEN);
-                        lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
-                        lvgl_port_unlock();
-                    }
+                    rust_ui_show_center_message("Connectivity Updated");
                     rust_display_timer_reset(true);
                     rust_backlight_set(true, false);
                     deinit_was();
@@ -272,15 +246,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
 
                     if (strcmp(json_cmd->valuestring, "restart") == 0) {
                         ESP_LOGI(TAG, "restart command received. restart");
-                        if (lvgl_port_lock(lvgl_lock_timeout)) {
-                            lv_label_set_text_static(lbl_ln3, "WAS Restart");
-                            lv_obj_add_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
-                            lv_obj_add_flag(lbl_ln2, LV_OBJ_FLAG_HIDDEN);
-                            lv_obj_add_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-                            lv_obj_add_flag(lbl_ln5, LV_OBJ_FLAG_HIDDEN);
-                            lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
-                            lvgl_port_unlock();
-                        }
+                        rust_ui_show_center_message("WAS Restart");
                         rust_backlight_set(true, false);
                         deinit_was();
                         restart_delayed();
@@ -353,12 +319,7 @@ esp_err_t init_was(void)
     };
     esp_err_t err = ESP_OK;
 
-    if (lvgl_port_lock(lvgl_lock_timeout)) {
-        lv_obj_clear_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_text_align(lbl_ln4, LV_TEXT_ALIGN_CENTER, 0);
-        lv_label_set_text_static(lbl_ln4, "Connecting to WAS...");
-        lvgl_port_unlock();
-    }
+    rust_ui_show_connecting("Connecting to WAS...");
 
     esp_log_level_set(TAG, ESP_LOG_DEBUG);
     ESP_LOGI(TAG, "initializing WebSocket client (%s)", was_url);
@@ -393,7 +354,7 @@ static bool was_is_connected(const bool wait)
             }
             i++;
         }
-        ui_pr_err("WAS disconnected", NULL);
+        rust_ui_show_error("WAS disconnected", NULL);
         return false;
     } else {
         return false;
@@ -599,17 +560,6 @@ cleanup:
     cJSON_Delete(cjson);
 }
 
-void cb_btn_cancel_notify(lv_event_t *ev)
-{
-    ESP_LOGD(TAG, "btn_cancel pressed");
-    esp_audio_stop(hdl_ea, TERMINATION_TYPE_NOW);
-    xSemaphoreTake(notify_mutex, portMAX_DELAY);
-    if (notify_active != NULL) {
-        notify_active->cancel = true;
-    }
-    xSemaphoreGive(notify_mutex);
-}
-
 static void notify_task(void *data)
 {
     bool strobe_started = false;
@@ -630,24 +580,8 @@ static void notify_task(void *data)
 
     ESP_LOGI(TAG, "started notify task for notification with ID='%" PRIu64 "'", nd->id);
 
-    if (lvgl_port_lock(lvgl_lock_timeout)) {
-        if (nd->text == NULL) {
-            lv_label_set_text_static(lbl_ln3, "Notification Active");
-        } else {
-            lv_label_set_text(lbl_ln3, nd->text);
-            free(nd->text);
-        }
-        lv_obj_remove_event_cb(btn_cancel, cb_btn_cancel);
-        lv_obj_add_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(lbl_ln2, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_flag(lbl_ln5, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_add_event_cb(btn_cancel, cb_btn_cancel_notify, LV_EVENT_PRESSED, NULL);
-        lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_clear_flag(btn_cancel, LV_OBJ_FLAG_HIDDEN);
-        lv_label_set_long_mode(lbl_ln3, LV_LABEL_LONG_SCROLL);
-        lvgl_port_unlock();
-    }
+    rust_ui_show_notification(nd->text, hdl_ea);
+    free(nd->text);
 
     rust_display_timer_reset(true);
     rust_backlight_set(nd->backlight, nd->backlight_max);
@@ -670,7 +604,7 @@ static void notify_task(void *data)
         }
 
         for (i = 0; i < nd->repeat; i++) {
-            if (nd->cancel) {
+            if (nd->cancel || rust_ui_notification_cancelled()) {
                 break;
             }
             if (hdl_ea != NULL) {
@@ -687,11 +621,7 @@ static void notify_task(void *data)
         }
     }
 
-    if (lvgl_port_lock(lvgl_lock_timeout)) {
-        lv_obj_add_flag(btn_cancel, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_remove_event_cb(btn_cancel, cb_btn_cancel_notify);
-        lvgl_port_unlock();
-    }
+    rust_ui_notification_end();
 
     rust_display_timer_reset(false);
 

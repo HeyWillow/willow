@@ -47,7 +47,6 @@ fn int_value(config: &Config, key: &str) -> Option<i64> {
     match key {
         "display_timeout" => config.display_timeout.map(i64::from),
         "lcd_brightness" => config.lcd_brightness.map(i64::from),
-        "lvgl_lock_timeout" => config.lvgl_lock_timeout.map(i64::from),
         "mic_gain" => config.mic_gain.map(i64::from),
         "mqtt_port" => config.mqtt_port.map(i64::from),
         "record_buffer" => config.record_buffer.map(i64::from),

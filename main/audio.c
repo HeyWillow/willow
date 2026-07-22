@@ -9,7 +9,6 @@
 #include "esp_decoder.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "esp_lvgl_port.h"
 #include "esp_task_wdt.h"
 #include "esp_timer.h"
 #include "filter_resample.h"
@@ -17,7 +16,6 @@
 #include "http_stream.h"
 #include "i2c_bus.h"
 #include "i2s_stream.h"
-#include "lvgl.h"
 #include "model_path.h"
 #include "raw_stream.h"
 #include "recorder_encoder.h"
@@ -31,9 +29,7 @@
 #include "config.h"
 #include "rust.h"
 #include "shared.h"
-#include "slvgl.h"
 #include "timer.h"
-#include "ui.h"
 #include "was.h"
 
 #if !defined(CONFIG_TASK_WDT_PANIC)
@@ -113,7 +109,7 @@ static void check_mute(void)
 {
     if (rust_input_is_muted()) {
         ESP_LOGW(TAG, "mute is activated, please unmute to continue startup");
-        ui_pr_err("Mute Activated", "Unmute to continue");
+        rust_ui_show_error("Mute Activated", "Unmute to continue");
         while (rust_input_is_muted()) {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
@@ -198,11 +194,11 @@ static esp_err_t cb_ae_hs(audio_element_handle_t el, audio_event_iface_msg_t *ev
             audio_recorder_trigger_stop(hdl_ar);
             war.fn_err("Cannot Reach WIS");
             ESP_LOGE(TAG, "Error opening STT endpoint (%d)", ae_status);
-            ui_pr_err("Cannot Reach WIS", "Check Server & Settings");
+            rust_ui_show_error("Cannot Reach WIS", "Check Server & Settings");
         } else if (type_hs == WILLOW_HS_ESP_AUDIO) {
             play_audio_err(NULL);
             ESP_LOGE(TAG, "Error opening ESP Audio endpoint (%d)", ae_status);
-            ui_pr_err("Cannot Reach WIS", "Check Server & Settings");
+            rust_ui_show_error("Cannot Reach WIS", "Check Server & Settings");
         }
     }
     return ESP_OK;
@@ -394,12 +390,7 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
             // Multinet timeout
             ESP_LOGI(TAG, "AUDIO_REC_COMMAND_DECT");
             war.fn_err("unrecognized command");
-            if (lvgl_port_lock(lvgl_lock_timeout)) {
-                lv_obj_clear_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_set_style_text_align(lbl_ln4, LV_TEXT_ALIGN_LEFT, 0);
-                lv_label_set_text(lbl_ln4, "#ff0000 Unrecognized Command");
-                lvgl_port_unlock();
-            }
+            rust_ui_show_unrecognized();
 
             rust_display_timer_reset(false);
             break;
@@ -431,24 +422,13 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
             if (strcmp(speech_rec_mode, "WIS") == 0) {
                 reset_timer(hdl_sess_timer, config_get_int("stream_timeout", DEFAULT_STREAM_TIMEOUT), false);
             }
-            if (lvgl_port_lock(lvgl_lock_timeout)) {
-                lv_obj_add_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_add_flag(lbl_ln2, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_add_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_add_flag(lbl_ln5, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_clear_flag(btn_cancel, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
-
-                if (strcmp(speech_rec_mode, "Multinet") == 0) {
-                    lv_label_set_text_static(lbl_ln3, "Say local command...");
-                } else if (strcmp(speech_rec_mode, "WIS") == 0) {
-                    lv_label_set_text_static(lbl_ln3, "Say command...");
-                } else {
-                    return ESP_ERR_INVALID_ARG;
-                }
-
-                lv_obj_add_event_cb(btn_cancel, cb_btn_cancel, LV_EVENT_PRESSED, NULL);
-                lvgl_port_unlock();
+            if (strcmp(speech_rec_mode, "Multinet") == 0) {
+                rust_ui_show_listening(true);
+            } else if (strcmp(speech_rec_mode, "WIS") == 0) {
+                rust_ui_show_listening(false);
+            } else {
+                free(speech_rec_mode);
+                return ESP_ERR_INVALID_ARG;
             }
             free(speech_rec_mode);
             rust_backlight_set(true, false);
@@ -467,15 +447,7 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
                 free(json);
 
                 ESP_LOGI(TAG, "Got local command ID: '%d'", command_id);
-                if (lvgl_port_lock(lvgl_lock_timeout)) {
-                    lv_obj_clear_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_clear_flag(lbl_ln2, LV_OBJ_FLAG_HIDDEN);
-                    lv_obj_add_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
-
-                    lv_label_set_text_static(lbl_ln1, "I heard command:");
-                    lv_label_set_text(lbl_ln2, lookup_cmd_multinet(command_id));
-                    lvgl_port_unlock();
-                }
+                rust_ui_show_recognition("I heard command:", lookup_cmd_multinet(command_id));
                 rust_display_timer_reset(false);
 #else
                 ESP_LOGE(TAG, "multinet not supported but enabled in config");
@@ -569,19 +541,19 @@ static esp_err_t hdl_ev_hs_to_api(http_stream_event_msg_t *msg)
             if (http_status != 200) {
                 // when ESP HTTP Client terminates connection due to timeout we get -1
                 if (http_status == -1) {
-                    ui_pr_err("WIS timeout", "Check server performance");
+                    rust_ui_show_error("WIS timeout", "Check server performance");
                 } else if (http_status == 401) {
                     ESP_LOGE(TAG, "WIS returned Unauthorized Access (HTTP 401)");
-                    ui_pr_err("WIS auth failed", "Check server & settings");
+                    rust_ui_show_error("WIS auth failed", "Check server & settings");
                 } else if (http_status == 406) {
                     ESP_LOGE(TAG, "WIS returned Unauthorized Speaker");
-                    ui_pr_err("Unauthorized Speaker", NULL);
+                    rust_ui_show_error("Unauthorized Speaker", NULL);
                     war.fn_err("Unauthorized Speaker");
                 } else {
                     ESP_LOGE(TAG, "WIS returned HTTP error: %d", http_status);
                     char str_http_err[14];
                     snprintf(str_http_err, 14, "WIS HTTP %d", http_status);
-                    ui_pr_err(str_http_err, NULL);
+                    rust_ui_show_error(str_http_err, NULL);
                     war.fn_err(str_http_err);
                 }
                 return ESP_FAIL;
@@ -596,32 +568,16 @@ static esp_err_t hdl_ev_hs_to_api(http_stream_event_msg_t *msg)
             }
             buf[read_len] = 0;
             ESP_LOGI(TAG, "WIS HTTP Response = %s", (char *)buf);
-            if (lvgl_port_lock(lvgl_lock_timeout)) {
-                lv_obj_add_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_add_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-                lvgl_port_unlock();
-            }
             was_send_endpoint(buf, false);
 
             cJSON *cjson = cJSON_Parse(buf);
             cJSON *text = cJSON_GetObjectItemCaseSensitive(cjson, "text");
             cJSON *speaker_status = cJSON_GetObjectItemCaseSensitive(cjson, "speaker_status");
 
-            if (lvgl_port_lock(lvgl_lock_timeout)) {
-                lv_obj_clear_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
-                lv_obj_clear_flag(lbl_ln2, LV_OBJ_FLAG_HIDDEN);
-                if (cJSON_IsString(speaker_status) && speaker_status->valuestring != NULL) {
-                    lv_label_set_text(lbl_ln1, speaker_status->valuestring);
-                } else {
-                    lv_label_set_text(lbl_ln1, "I heard:");
-                }
-                if (cJSON_IsString(text) && text->valuestring != NULL) {
-                    lv_label_set_text(lbl_ln2, text->valuestring);
-                } else {
-                    lv_label_set_text(lbl_ln2, buf);
-                }
-                lvgl_port_unlock();
-            }
+            rust_ui_show_recognition(
+                cJSON_IsString(speaker_status) && speaker_status->valuestring != NULL ? speaker_status->valuestring
+                                                                                     : "I heard:",
+                cJSON_IsString(text) && text->valuestring != NULL ? text->valuestring : buf);
 
             cJSON_Delete(cjson);
             free(buf);
@@ -889,7 +845,7 @@ static esp_err_t start_rec(void)
 
     if (cfg_ar.sr_handle == NULL) {
         ESP_LOGE(TAG, "failed to init SR recorder");
-        ui_pr_err("Recorder init failed", "Check logs");
+        rust_ui_show_error("Recorder init failed", "Check logs");
         return ESP_FAIL;
     }
 
@@ -932,11 +888,7 @@ static void at_read(void *data)
                     audio_element_set_ringbuf_done(hdl_ae_rs_to_api);
                     recording = false;
                     stream_to_api = false;
-                    if (lvgl_port_lock(lvgl_lock_timeout)) {
-                        lv_label_set_text_static(lbl_ln3, multiwake_won ? "Thinking..." : "WOW Active - Exiting");
-                        lv_obj_add_flag(btn_cancel, LV_OBJ_FLAG_HIDDEN);
-                        lvgl_port_unlock();
-                    }
+                    rust_ui_show_thinking(multiwake_won);
                     rust_display_timer_reset(false);
                     break;
                 default:
@@ -1061,18 +1013,7 @@ esp_err_t init_audio(void)
     }
     free(wake_word);
 
-    if (ld == NULL) {
-        ESP_LOGE(TAG, "lv_disp_t ld is NULL!!!!");
-    } else {
-        if (lvgl_port_lock(lvgl_lock_timeout)) {
-            lv_obj_add_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-            lv_label_set_long_mode(lbl_ln1, LV_LABEL_LONG_SCROLL);
-            lv_label_set_long_mode(lbl_ln5, LV_LABEL_LONG_SCROLL);
-            lv_label_set_text(lbl_ln3, wake_help);
-
-            lvgl_port_unlock();
-        }
-    }
+    rust_ui_show_ready(wake_help);
 
     return ret;
 }

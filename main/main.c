@@ -1,9 +1,7 @@
 #include "esp_err.h"
 #include "esp_log.h"
-#include "esp_lvgl_port.h"
 #include "esp_netif.h"
 #include "esp_ota_ops.h"
-#include "lvgl.h"
 #include "sdkconfig.h"
 
 #include "audio.h"
@@ -11,9 +9,7 @@
 #include "main.h"
 #include "rust.h"
 #include "shared.h"
-#include "slvgl.h"
 #include "system.h"
-#include "ui.h"
 #include "was.h"
 
 #ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
@@ -35,18 +31,12 @@ void willow_init(void)
     (void)rust_spiffs_mount();
     config_parse();
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_init());
-    init_lvgl_display();
-    init_ui();
+    ESP_ERROR_CHECK_WITHOUT_ABORT(rust_ui_init());
 
     ESP_ERROR_CHECK(esp_netif_init());
 
 #ifdef CONFIG_WILLOW_ETHERNET
-    if (lvgl_port_lock(lvgl_lock_timeout)) {
-        lv_obj_clear_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_text_align(lbl_ln4, LV_TEXT_ALIGN_CENTER, 0);
-        lv_label_set_text_static(lbl_ln4, "Connecting to Ethernet ...");
-        lvgl_port_unlock();
-    }
+    rust_ui_show_connecting("Connecting to Ethernet ...");
     ESP_ERROR_CHECK(rust_ethernet_init());
 #else
     char psk[64];
@@ -54,12 +44,7 @@ void willow_init(void)
     if (!rust_nvs_read_wifi(psk, sizeof(psk), ssid, sizeof(ssid))) {
         goto err_nvs;
     }
-    if (lvgl_port_lock(lvgl_lock_timeout)) {
-        lv_obj_clear_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
-        lv_obj_set_style_text_align(lbl_ln4, LV_TEXT_ALIGN_CENTER, 0);
-        lv_label_set_text_static(lbl_ln4, "Connecting to Wi-Fi...");
-        lvgl_port_unlock();
-    }
+    rust_ui_show_connecting("Connecting to Wi-Fi...");
 
     (void)rust_wifi_init(psk, ssid, &hdl_netif);
 #endif
@@ -78,7 +63,7 @@ void willow_init(void)
     err = init_was();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to initialize Willow Application Server connection");
-        ui_pr_err("Fatal error!", "WAS initialization failed.");
+        rust_ui_show_error("Fatal error!", "WAS initialization failed.");
     }
 
     if (!config_valid) {
@@ -89,14 +74,14 @@ void willow_init(void)
 // we jump over WAS initialization was without Wi-Fi this will never work
 err_nvs:
     if (!rust_state_is_nvs_ok()) {
-        ui_pr_err("Fatal error!", "Failed to read NVS partition.");
+        rust_ui_show_error("Fatal error!", "Failed to read NVS partition.");
         // wait "indefinitely"
         vTaskDelay(portMAX_DELAY);
     }
 
     init_audio();
-    init_lvgl_touch();
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_timer_init());
+    ESP_ERROR_CHECK_WITHOUT_ABORT(rust_ui_touch_init(MSG_STOP));
 
 #ifndef CONFIG_WILLOW_ETHERNET
     rust_get_mac_address(); // should be on wifi by now; print the MAC

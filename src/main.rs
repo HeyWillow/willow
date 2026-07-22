@@ -14,6 +14,7 @@ mod runtime_stats;
 mod sntp;
 mod spiffs;
 mod state;
+mod ui;
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::delay::FreeRtos;

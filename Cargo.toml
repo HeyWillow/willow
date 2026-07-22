@@ -11,9 +11,11 @@ name = "willow"
 harness = false
 
 [dependencies]
+embedded-graphics = "=0.8.2"
 esp-idf-svc = { version = "=0.52.1", default-features = false, features = ["std"] }
 esp-idf-sys = "=0.37.2"
 log = "0.4"
+rusttype = { version = "=0.9.3", default-features = false, features = ["libm-math"] }
 serde_json = { version = "1", default-features = false, features = ["alloc"] }
 willow-schema = { git = "https://github.com/HeyWillow/willow-schema.git", rev = "1622fcfb006b62763fe62b95e10f0b82bf454ba1" }
 
@@ -29,6 +31,7 @@ esp_idf_components = ["main"]
 
 [[package.metadata.esp-idf-sys.extra_components]]
 component_dirs = ["deps/esp-adf/components"]
+bindings_header = "bindings.h"
 
 [profile.release]
 debug = true
