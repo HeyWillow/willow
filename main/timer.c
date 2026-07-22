@@ -5,7 +5,7 @@
 #include "freertos/queue.h"
 
 #include "audio.h"
-#include "display.h"
+#include "rust.h"
 #include "timer.h"
 
 static const char *TAG = "WILLOW/TIMER";
@@ -14,7 +14,7 @@ esp_timer_handle_t hdl_display_timer = NULL, hdl_sess_timer = NULL;
 static void cb_display_timer(void *data)
 {
     ESP_LOGI(TAG, "Wake LCD timeout, turning off LCD");
-    display_set_backlight(false, false);
+    rust_backlight_set(false, false);
 }
 
 static void cb_session_timer(void *data)

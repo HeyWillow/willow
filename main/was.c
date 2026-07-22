@@ -149,7 +149,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                         lvgl_port_unlock();
                     }
                     reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
-                    display_set_backlight(true, false);
+                    rust_backlight_set(true, false);
                     deinit_was();
                     restart_delayed();
                 }
@@ -285,7 +285,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                             lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
                             lvgl_port_unlock();
                         }
-                        display_set_backlight(true, false);
+                        rust_backlight_set(true, false);
                         deinit_was();
                         restart_delayed();
                     }
@@ -654,7 +654,7 @@ static void notify_task(void *data)
     }
 
     reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
-    display_set_backlight(nd->backlight, nd->backlight_max);
+    rust_backlight_set(nd->backlight, nd->backlight_max);
 
     if (nd->strobe_period_ms > 0) {
         willow_strobe_parms_t *wsp = (willow_strobe_parms_t *)calloc(1, sizeof(willow_strobe_parms_t));
@@ -699,7 +699,7 @@ static void notify_task(void *data)
 out:
     if (hdl_task_strobe != NULL) {
         vTaskDelete(hdl_task_strobe);
-        display_set_backlight(true, false);
+        rust_backlight_set(true, false);
     }
 
     if (nd->id == 1) {

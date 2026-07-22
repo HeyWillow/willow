@@ -28,7 +28,7 @@
 
 #include "audio.h"
 #include "config.h"
-#include "display.h"
+#include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
 #include "timer.h"
@@ -92,7 +92,7 @@ static void cb_ea(esp_audio_state_t *state, void *data)
 static void play_audio(const char *uri)
 {
     reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), false);
-    display_set_backlight(true, false);
+    rust_backlight_set(true, false);
 
     if (hdl_ea == NULL) {
         ESP_LOGE(TAG, "audio_play called with hdl_ea=NULL, skip audio playback");
@@ -451,7 +451,7 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
                 lvgl_port_unlock();
             }
             free(speech_rec_mode);
-            display_set_backlight(true, false);
+            rust_backlight_set(true, false);
             break;
         default:
             speech_rec_mode = config_get_char("speech_rec_mode", DEFAULT_SPEECH_REC_MODE);

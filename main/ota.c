@@ -8,7 +8,6 @@
 
 #include "audio.h"
 #include "config.h"
-#include "display.h"
 #include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
@@ -46,7 +45,7 @@ void ota_start(char *url)
         lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
         lvgl_port_unlock();
     }
-    display_set_backlight(true, false);
+    rust_backlight_set(true, false);
 
     deinit_audio();
     deinit_was();

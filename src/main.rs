@@ -1,3 +1,4 @@
+mod backlight;
 mod config;
 mod ffi;
 mod logging;

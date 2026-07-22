@@ -12,7 +12,6 @@
 
 #include "audio.h"
 #include "config.h"
-#include "display.h"
 #include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
@@ -85,6 +84,6 @@ void config_write(const char *data)
         lvgl_port_unlock();
     }
     reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
-    display_set_backlight(true, false);
+    rust_backlight_set(true, false);
     restart_delayed();
 }

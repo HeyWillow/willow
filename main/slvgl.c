@@ -14,6 +14,7 @@
 #include "config.h"
 #include "display.h"
 #include "i2c.h"
+#include "rust.h"
 #include "system.h"
 #include "timer.h"
 
@@ -68,7 +69,7 @@ void cb_scr(lv_event_t *ev)
 
         case LV_EVENT_PRESSED:
             reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
-            display_set_backlight(true, false);
+            rust_backlight_set(true, false);
             break;
 
         default:
