@@ -1,5 +1,6 @@
 mod config;
 mod ffi;
+mod i2c;
 
 fn main() {
     esp_idf_sys::link_patches();
@@ -7,6 +8,10 @@ fn main() {
 
     log::info!(target: "WILLOW/RUST", "entered Rust main()");
 
+    if let Err(error) = i2c::init() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize I2C0 master bus: {error}");
+        unsafe { esp_idf_sys::esp_system_abort(c"I2C0 initialization failed".as_ptr()) }
+    }
     ffi::init();
 
     loop {

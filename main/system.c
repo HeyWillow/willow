@@ -7,7 +7,6 @@
 #include "lvgl.h"
 #include "sdkconfig.h"
 
-#include "i2c.h"
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
@@ -56,7 +55,6 @@ static esp_err_t init_ev_loop()
 void init_system(void)
 {
     set_hw_type();
-    init_i2c();
     ESP_ERROR_CHECK(init_ev_loop());
 }
 
