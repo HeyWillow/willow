@@ -2,8 +2,6 @@
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
 
-#include "config.h"
-#include "shared.h"
 #include "slvgl.h"
 
 static const char *TAG = "WILLOW/UI";
@@ -13,8 +11,6 @@ void init_ui(void)
     if (ld == NULL) {
         ESP_LOGE(TAG, "lv_disp_t ld is NULL!!!!");
     } else {
-        char *speech_rec_mode = config_get_char("speech_rec_mode", DEFAULT_SPEECH_REC_MODE);
-
         if (lvgl_port_lock(lvgl_lock_timeout)) {
             lv_obj_t *scr_act = lv_disp_get_scr_act(ld);
             lv_obj_t *lbl_hdr = lv_label_create(scr_act);
@@ -89,20 +85,11 @@ void init_ui(void)
             lv_obj_set_width(lbl_ln4, 300);
             lv_obj_set_width(lbl_ln5, 300);
 
-            if (strcmp(speech_rec_mode, "Multinet") == 0) {
-#if defined(WILLOW_SUPPORT_MULTINET)
-                lv_label_set_text_static(lbl_ln3, "Starting up (local)...");
-#else
-                lv_label_set_text_static(lbl_ln3, "Multinet Not Supported");
-#endif
-            } else if (strcmp(speech_rec_mode, "WIS") == 0) {
-                lv_label_set_text_static(lbl_ln3, "Starting up (server)...");
-            }
+            lv_label_set_text_static(lbl_ln3, "Starting up (server)...");
             lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
 
             lvgl_port_unlock();
         }
-        free(speech_rec_mode);
     }
 }
 

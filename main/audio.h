@@ -11,7 +11,6 @@ struct willow_audio_response {
 typedef enum {
     MSG_STOP,
     MSG_START,
-    MSG_START_LOCAL,
 } q_msg;
 
 extern audio_rec_handle_t hdl_ar;

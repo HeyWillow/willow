@@ -117,17 +117,6 @@ check_deps() {
     fi
 }
 
-generate_speech_commands() {
-    rm -rf build/srmodels
-    /usr/bin/python3 speech_commands/generate_commands.py
-
-    if [ -r "$WILLOW_PATH"/speech_commands/commands_en.txt ]; then
-        echo "Linking custom speech commands"
-        ln -sf "$WILLOW_PATH"/speech_commands/commands_en.txt \
-            "$WILLOW_PATH"/managed_components/esp-sr/model/multinet_model/fst/commands_en.txt
-    fi
-}
-
 generate_nvs() {
     SSID=$(grep CONFIG_WIFI_SSID sdkconfig | cut -d'=' -f2 | tr -d '"')
     PASSWORD=$(grep CONFIG_WIFI_PASSWORD sdkconfig | cut -d'=' -f2 | tr -d '"')
@@ -217,7 +206,6 @@ fullclean)
 build)
     check_container
     check_deps
-    [ "$MULTINET" ] && generate_speech_commands
     if [ $2 ]; then
         echo "Adding timestamp to dev build"
         TS=$(date '+%d-%m-%Y_%H:%M:%S')

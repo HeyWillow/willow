@@ -2,11 +2,6 @@
 # CMakeLists in this exact order for cmake to work correctly
 cmake_minimum_required(VERSION 3.5)
 
-if($ENV{MULTINET})
-    message("Enabling MultiNet support. Please note we will not provide support. Issues related to MultiNet will be closed without resolution.")
-    add_definitions(-DWILLOW_SUPPORT_MULTINET)
-endif()
-
 if(DEFINED ENV{WILLOW_VERSION})
     add_definitions(-DWILLOW_USER_AGENT="Willow/$ENV{WILLOW_VERSION}")
 else()
