@@ -15,7 +15,6 @@
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
-#include "timer.h"
 #include "ui.h"
 #include "was.h"
 
@@ -106,7 +105,7 @@ err_nvs:
     init_input_key_service();
     init_audio();
     init_lvgl_touch();
-    init_display_timer();
+    ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_timer_init());
 
 #ifndef CONFIG_WILLOW_ETHERNET
     rust_get_mac_address(); // should be on wifi by now; print the MAC
@@ -121,8 +120,7 @@ err_nvs:
     // we can also still crash in the while loop below - this should be improved
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ota_mark_app_valid_cancel_rollback());
 
-    ESP_ERROR_CHECK_WITHOUT_ABORT(
-        reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), false));
+    ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_timer_reset(false));
 }
 
 #ifdef WILLOW_CARGO_FIRST

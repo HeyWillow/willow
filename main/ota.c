@@ -7,12 +7,10 @@
 #include "lvgl.h"
 
 #include "audio.h"
-#include "config.h"
 #include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
-#include "timer.h"
 #include "was.h"
 
 static const char *TAG = "WILLOW/OTA";
@@ -35,7 +33,7 @@ void ota_task(void *data)
 
 void ota_start(char *url)
 {
-    reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
+    rust_display_timer_reset(true);
     if (lvgl_port_lock(lvgl_lock_timeout)) {
         lv_obj_add_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
         lv_obj_add_flag(lbl_ln2, LV_OBJ_FLAG_HIDDEN);

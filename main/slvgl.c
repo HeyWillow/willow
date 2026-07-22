@@ -6,7 +6,6 @@
 #include "esp_lcd_touch_tt21100.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
-#include "esp_timer.h"
 #include "lvgl.h"
 #include "periph_lcd.h"
 
@@ -16,7 +15,6 @@
 #include "i2c.h"
 #include "rust.h"
 #include "system.h"
-#include "timer.h"
 
 #define DEFAULT_LOCK_TIMEOUT 500
 
@@ -64,11 +62,11 @@ void cb_scr(lv_event_t *ev)
     // printf("cb_scr\n");
     switch (lv_event_get_code(ev)) {
         case LV_EVENT_RELEASED:
-            reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), false);
+            rust_display_timer_reset(false);
             break;
 
         case LV_EVENT_PRESSED:
-            reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
+            rust_display_timer_reset(true);
             rust_backlight_set(true, false);
             break;
 

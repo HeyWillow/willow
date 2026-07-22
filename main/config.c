@@ -7,7 +7,6 @@
 #include "esp_lvgl_port.h"
 #include "esp_spiffs.h"
 #include "esp_system.h"
-#include "esp_timer.h"
 #include "lvgl.h"
 
 #include "audio.h"
@@ -16,7 +15,6 @@
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
-#include "timer.h"
 #include "was.h"
 
 static const char *TAG = "WILLOW/CONFIG";
@@ -83,7 +81,7 @@ void config_write(const char *data)
         lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
         lvgl_port_unlock();
     }
-    reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
+    rust_display_timer_reset(true);
     rust_backlight_set(true, false);
     restart_delayed();
 }

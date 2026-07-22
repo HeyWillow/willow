@@ -1,4 +1,4 @@
-//! LCD backlight PWM ownership and the temporary C-facing control API.
+//! LCD backlight PWM, strobe, and timeout ownership with a temporary C API.
 
 use std::{
     sync::{
@@ -9,6 +9,7 @@ use std::{
     time::Duration,
 };
 
+use esp_idf_svc::timer::{EspTaskTimerService, EspTimer};
 use esp_idf_sys::{
     ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_FAIL, ESP_OK, EspError, esp_err_t,
     gpio_num_t_GPIO_NUM_45, gpio_num_t_GPIO_NUM_47, ledc_channel_config, ledc_channel_config_t,
@@ -17,14 +18,16 @@ use esp_idf_sys::{
     ledc_timer_config, ledc_timer_config_t, ledc_timer_t_LEDC_TIMER_1,
     soc_periph_ledc_clk_src_legacy_t_LEDC_AUTO_CLK,
 };
-use log::{debug, error};
+use log::{debug, error, info};
 
 const DEFAULT_BRIGHTNESS: u32 = 700;
+const DEFAULT_DISPLAY_TIMEOUT_SECS: u32 = 10;
 const FREQUENCY_HZ: u32 = 5_000;
 const LOG_TARGET: &str = "WILLOW/DISPLAY";
 const MAX_DUTY: u32 = 1_023;
 const MIN_STROBE_PERIOD_MS: u32 = 20;
 const STROBE_STACK_SIZE: usize = 3_072;
+const TIMER_LOG_TARGET: &str = "WILLOW/TIMER";
 
 const BACKLIGHT_GPIO: i32 = if cfg!(esp_idf_esp32_s3_box_3_board) {
     gpio_num_t_GPIO_NUM_47
@@ -45,6 +48,7 @@ struct Strobe {
 }
 
 static BACKLIGHT: OnceLock<Backlight> = OnceLock::new();
+static DISPLAY_TIMER: Mutex<Option<EspTimer<'static>>> = Mutex::new(None);
 static STROBE: Mutex<Option<Strobe>> = Mutex::new(None);
 
 fn check(result: esp_err_t, operation: &str) -> Result<(), EspError> {
@@ -138,6 +142,37 @@ fn initialize() -> Result<(), EspError> {
     Ok(())
 }
 
+fn initialize_display_timer() -> Result<(), EspError> {
+    let mut display_timer = DISPLAY_TIMER.lock().unwrap_or_else(PoisonError::into_inner);
+    if display_timer.is_some() {
+        return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
+    }
+
+    let timer_service = EspTaskTimerService::new()?;
+    *display_timer = Some(timer_service.timer(|| {
+        info!(target: TIMER_LOG_TARGET, "Wake LCD timeout, turning off LCD");
+        set(false, false);
+    })?);
+
+    Ok(())
+}
+
+fn reset_display_timer(pause: bool) -> Result<(), EspError> {
+    let display_timer = DISPLAY_TIMER.lock().unwrap_or_else(PoisonError::into_inner);
+    let Some(display_timer) = display_timer.as_ref() else {
+        return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
+    };
+
+    if pause {
+        display_timer.cancel().map(|_| ())
+    } else {
+        let timeout_secs = crate::config::config()
+            .and_then(|configuration| configuration.display_timeout)
+            .unwrap_or(DEFAULT_DISPLAY_TIMEOUT_SECS);
+        display_timer.after(Duration::from_secs(u64::from(timeout_secs)))
+    }
+}
+
 fn set(on: bool, maximum: bool) {
     let Some(backlight) = BACKLIGHT.get() else {
         error!(target: LOG_TARGET, "backlight is not initialized");
@@ -167,7 +202,7 @@ fn set(on: bool, maximum: bool) {
 }
 
 fn strobe(period: Duration, stop: Receiver<()>) {
-    log::info!(
+    info!(
         target: LOG_TARGET,
         "starting display backlight strobe effect with period '{}'",
         period.as_millis()
@@ -237,6 +272,24 @@ pub extern "C" fn rust_backlight_init() -> esp_err_t {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_backlight_set(on: bool, maximum: bool) {
     set(on, maximum);
+}
+
+/// Creates and retains the one-shot display timeout timer.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_display_timer_init() -> esp_err_t {
+    match initialize_display_timer() {
+        Ok(()) => ESP_OK,
+        Err(error) => error.code(),
+    }
+}
+
+/// Stops the display timer and optionally schedules its next timeout.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_display_timer_reset(pause: bool) -> esp_err_t {
+    match reset_display_timer(pause) {
+        Ok(()) => ESP_OK,
+        Err(error) => error.code(),
+    }
 }
 
 /// Starts a Rust-owned task that alternates the maximum and off duties.

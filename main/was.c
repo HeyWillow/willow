@@ -4,7 +4,6 @@
 #include "esp_lvgl_port.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
-#include "esp_timer.h"
 #include "esp_transport_ws.h"
 #include "esp_websocket_client.h"
 #include "lvgl.h"
@@ -16,7 +15,6 @@
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
-#include "timer.h"
 #include "ui.h"
 #include "was.h"
 
@@ -110,8 +108,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                                 lv_label_set_text(lbl_ln5, cJSON_IsTrue(ok) ? "Success!" : "Error");
                             }
                             lvgl_port_unlock();
-                            reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT),
-                                        false);
+                            rust_display_timer_reset(false);
                         }
                     }
                     goto cleanup;
@@ -147,7 +144,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                         lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
                         lvgl_port_unlock();
                     }
-                    reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
+                    rust_display_timer_reset(true);
                     rust_backlight_set(true, false);
                     deinit_was();
                     restart_delayed();
@@ -652,7 +649,7 @@ static void notify_task(void *data)
         lvgl_port_unlock();
     }
 
-    reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
+    rust_display_timer_reset(true);
     rust_backlight_set(nd->backlight, nd->backlight_max);
 
     if (nd->strobe_period_ms > 0) {
@@ -696,7 +693,7 @@ static void notify_task(void *data)
         lvgl_port_unlock();
     }
 
-    reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), false);
+    rust_display_timer_reset(false);
 
 out:
     if (strobe_started) {
