@@ -4,7 +4,6 @@
 #include "esp_lvgl_port.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
-#include "esp_timer.h"
 #include "esp_transport_ws.h"
 #include "esp_websocket_client.h"
 #include "lvgl.h"
@@ -12,13 +11,12 @@
 
 #include "audio.h"
 #include "config.h"
-#include "display.h"
 #include "network.h"
 #include "ota.h"
+#include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
 #include "system.h"
-#include "timer.h"
 #include "ui.h"
 #include "was.h"
 
@@ -109,8 +107,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                                 lv_label_set_text(lbl_ln5, cJSON_IsTrue(ok) ? "Success!" : "Error");
                             }
                             lvgl_port_unlock();
-                            reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT),
-                                        false);
+                            rust_display_timer_reset(false);
                         }
                     }
                     goto cleanup;
@@ -193,8 +190,8 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                         lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
                         lvgl_port_unlock();
                     }
-                    reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
-                    display_set_backlight(true, false);
+                    rust_display_timer_reset(true);
+                    rust_backlight_set(true, false);
                     deinit_was();
                     restart_delayed();
                 }
@@ -330,7 +327,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                             lv_obj_clear_flag(lbl_ln3, LV_OBJ_FLAG_HIDDEN);
                             lvgl_port_unlock();
                         }
-                        display_set_backlight(true, false);
+                        rust_backlight_set(true, false);
                         deinit_was();
                         restart_delayed();
                     }
@@ -661,7 +658,7 @@ void cb_btn_cancel_notify(lv_event_t *ev)
 
 static void notify_task(void *data)
 {
-    TaskHandle_t hdl_task_strobe = NULL;
+    bool strobe_started = false;
     cJSON *cjson = NULL;
     char *json = NULL;
     esp_err_t ret;
@@ -698,13 +695,16 @@ static void notify_task(void *data)
         lvgl_port_unlock();
     }
 
-    reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
-    display_set_backlight(nd->backlight, nd->backlight_max);
+    rust_display_timer_reset(true);
+    rust_backlight_set(nd->backlight, nd->backlight_max);
 
     if (nd->strobe_period_ms > 0) {
-        willow_strobe_parms_t *wsp = (willow_strobe_parms_t *)calloc(1, sizeof(willow_strobe_parms_t));
-        wsp->period_ms = nd->strobe_period_ms;
-        xTaskCreatePinnedToCore(display_backlight_strobe_task, "strobe_task", 2048, wsp, 5, &hdl_task_strobe, 0);
+        ret = rust_backlight_strobe_start((uint32_t)nd->strobe_period_ms);
+        if (ret == ESP_OK) {
+            strobe_started = true;
+        } else {
+            ESP_LOGE(TAG, "failed to start display backlight strobe: %s", esp_err_to_name(ret));
+        }
     }
 
     if (nd->audio_url != NULL) {
@@ -739,12 +739,11 @@ static void notify_task(void *data)
         lvgl_port_unlock();
     }
 
-    reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), false);
+    rust_display_timer_reset(false);
 
 out:
-    if (hdl_task_strobe != NULL) {
-        vTaskDelete(hdl_task_strobe);
-        display_set_backlight(true, false);
+    if (strobe_started) {
+        rust_backlight_strobe_stop();
     }
 
     if (nd->id == 1) {

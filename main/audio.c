@@ -28,7 +28,6 @@
 
 #include "audio.h"
 #include "config.h"
-#include "display.h"
 #include "rust.h"
 #include "shared.h"
 #include "slvgl.h"
@@ -82,8 +81,8 @@ static void cb_ea(esp_audio_state_t *state, void *data)
 
 static void play_audio(const char *uri)
 {
-    reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), false);
-    display_set_backlight(true, false);
+    rust_display_timer_reset(false);
+    rust_backlight_set(true, false);
 
     if (hdl_ea == NULL) {
         ESP_LOGE(TAG, "audio_play called with hdl_ea=NULL, skip audio playback");
@@ -389,7 +388,7 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
             recorder_sr_wakeup_result_t *wake_data = are->event_data;
             ESP_LOGI(TAG, "wake volume: %f", wake_data->data_volume);
             send_wake_start(wake_data->data_volume);
-            reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), true);
+            rust_display_timer_reset(true);
             reset_timer(hdl_sess_timer, config_get_int("stream_timeout", DEFAULT_STREAM_TIMEOUT), false);
             if (lvgl_port_lock(lvgl_lock_timeout)) {
                 lv_obj_add_flag(lbl_ln1, LV_OBJ_FLAG_HIDDEN);
@@ -404,7 +403,7 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
                 lv_obj_add_event_cb(btn_cancel, cb_btn_cancel, LV_EVENT_PRESSED, NULL);
                 lvgl_port_unlock();
             }
-            display_set_backlight(true, false);
+            rust_backlight_set(true, false);
             break;
         default:
             ESP_LOGI(TAG, "cb_ar_event: unhandled event: '%d'", are->type);
@@ -828,7 +827,7 @@ static void at_read(void *data)
                         lv_obj_add_flag(btn_cancel, LV_OBJ_FLAG_HIDDEN);
                         lvgl_port_unlock();
                     }
-                    reset_timer(hdl_display_timer, config_get_int("display_timeout", DEFAULT_DISPLAY_TIMEOUT), false);
+                    rust_display_timer_reset(false);
                     break;
                 default:
                     printf("at_read(): invalid msg '%d'\n", msg);

@@ -12,6 +12,8 @@
 #include "system.h"
 
 static const char *TAG = "WILLOW/SYSTEM";
+enum willow_hw_t hw_type;
+
 static const char *willow_hw_t[WILLOW_HW_MAX] = {
     [WILLOW_HW_UNSUPPORTED] = "HW-UNSUPPORTED",
     [WILLOW_HW_ESP32_S3_BOX] = "ESP32-S3-BOX",

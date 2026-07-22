@@ -22,7 +22,7 @@ const LOG_TARGET: &str = "WILLOW/CONFIG";
 /// Keeping the document in a [`OnceLock`] makes its references stable and
 /// reflects the firmware lifecycle: writing a new configuration schedules a
 /// restart instead of mutating the active document.
-fn config() -> Option<&'static Config> {
+pub(crate) fn config() -> Option<&'static Config> {
     CONFIG.get()
 }
 
@@ -43,8 +43,6 @@ fn bool_value(config: &Config, key: &str) -> Option<bool> {
 /// configuration numbers are unsigned in the shared schema.
 fn int_value(config: &Config, key: &str) -> Option<i64> {
     match key {
-        "display_timeout" => config.display_timeout.map(i64::from),
-        "lcd_brightness" => config.lcd_brightness.map(i64::from),
         "lvgl_lock_timeout" => config.lvgl_lock_timeout.map(i64::from),
         "mic_gain" => config.mic_gain.map(i64::from),
         "record_buffer" => config.record_buffer.map(i64::from),

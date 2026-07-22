@@ -1,5 +1,7 @@
 mod audio;
+mod backlight;
 mod config;
+mod display;
 mod ffi;
 mod i2c;
 
