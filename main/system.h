@@ -1,5 +1,3 @@
-#include "esp_peripherals.h"
-
 enum willow_hw_t {
     WILLOW_HW_UNSUPPORTED = 0,
     WILLOW_HW_ESP32_S3_BOX,
@@ -9,7 +7,6 @@ enum willow_hw_t {
 };
 
 extern enum willow_hw_t hw_type;
-extern esp_periph_set_handle_t hdl_pset;
 
 const char *str_hw_type(int id);
 void init_system(void);

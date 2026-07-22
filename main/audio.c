@@ -111,11 +111,10 @@ static void play_audio(const char *uri)
 
 static void check_mute(void)
 {
-    int gpio_level = gpio_get_level(GPIO_NUM_1);
-    if (gpio_level == 0) {
+    if (rust_input_is_muted()) {
         ESP_LOGW(TAG, "mute is activated, please unmute to continue startup");
         ui_pr_err("Mute Activated", "Unmute to continue");
-        while (gpio_get_level(GPIO_NUM_1) == 0) {
+        while (rust_input_is_muted()) {
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
     }
@@ -924,6 +923,10 @@ static void at_read(void *data)
                 case MSG_START_LOCAL:
                     recording = true;
                     break;
+                case MSG_UNMUTE:
+                    ESP_LOGI(TAG, "unmute");
+                    init_adc();
+                    break;
                 case MSG_STOP:
                     delay = portMAX_DELAY;
                     audio_element_set_ringbuf_done(hdl_ae_rs_to_api);
@@ -1010,6 +1013,8 @@ esp_err_t init_audio(void)
     esp_err_t ret = ESP_OK;
 
     check_mute();
+    ESP_RETURN_ON_ERROR(rust_input_monitor_start(MSG_UNMUTE), TAG,
+                        "failed to start mute input monitor");
 
     hdl_ahc = audio_board_codec_init();
     gpio_set_level(get_pa_enable_gpio(), 0);

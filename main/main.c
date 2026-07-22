@@ -8,7 +8,6 @@
 
 #include "audio.h"
 #include "config.h"
-#include "input.h"
 #include "main.h"
 #include "rust.h"
 #include "shared.h"
@@ -28,14 +27,9 @@
 char was_url[2048];
 static const char *TAG = "WILLOW/MAIN";
 
-esp_periph_set_handle_t hdl_pset;
-
 void willow_init(void)
 {
     esp_err_t err;
-
-    esp_periph_config_t pcfg = DEFAULT_ESP_PERIPH_SET_CONFIG();
-    hdl_pset = esp_periph_set_init(&pcfg);
 
     init_system();
     (void)rust_spiffs_mount();
@@ -100,8 +94,6 @@ err_nvs:
         vTaskDelay(portMAX_DELAY);
     }
 
-    init_buttons();
-    init_input_key_service();
     init_audio();
     init_lvgl_touch();
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_timer_init());

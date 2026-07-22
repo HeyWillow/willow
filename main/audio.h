@@ -12,6 +12,7 @@ typedef enum {
     MSG_STOP,
     MSG_START,
     MSG_START_LOCAL,
+    MSG_UNMUTE,
 } q_msg;
 
 extern audio_rec_handle_t hdl_ar;
