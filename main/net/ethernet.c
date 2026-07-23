@@ -111,7 +111,6 @@ esp_err_t init_ethernet(void)
     eth_phy_config_t phy_config_spi = ETH_PHY_DEFAULT_CONFIG();
 
     // Init SPI bus
-    spi_device_handle_t spi_handle[1] = {NULL};
     spi_bus_config_t buscfg = {
         .miso_io_num = WILLOW_ETHERNET_MISO,
         .mosi_io_num = WILLOW_ETHERNET_MOSI,
@@ -141,9 +140,8 @@ esp_err_t init_ethernet(void)
         // Set SPI module Chip Select GPIO
         devcfg.spics_io_num = spi_eth_module_config[i].spi_cs_gpio;
 
-        ESP_ERROR_CHECK(spi_bus_add_device(WILLOW_ETHERNET_SPI_BUS, &devcfg, &spi_handle[i]));
         // w5500 ethernet driver is based on spi driver
-        eth_w5500_config_t w5500_config = ETH_W5500_DEFAULT_CONFIG(spi_handle[i]);
+        eth_w5500_config_t w5500_config = ETH_W5500_DEFAULT_CONFIG(WILLOW_ETHERNET_SPI_BUS, &devcfg);
 
         // Set remaining GPIO numbers and configuration used by the SPI module
         w5500_config.int_gpio_num = spi_eth_module_config[i].int_gpio;
