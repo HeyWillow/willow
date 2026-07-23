@@ -294,70 +294,6 @@ void deinit_was(void)
     vTaskDelay(2000 / portTICK_PERIOD_MS);
 }
 
-static bool was_is_connected(const bool wait)
-{
-    if (esp_websocket_client_is_connected(rust_was_client_handle())) {
-        return true;
-    }
-
-    if (wait) {
-        int max = WAS_RECONNECT_TIMEOUT_MS / 1000;
-        for (int i = 0; i < max; i++) {
-            if (esp_websocket_client_is_connected(rust_was_client_handle())) {
-                return true;
-            }
-            i++;
-        }
-        rust_ui_show_error("WAS disconnected", NULL);
-        return false;
-    } else {
-        return false;
-    }
-}
-
-esp_err_t was_send_endpoint(const char *data, bool nc_skip)
-{
-    cJSON *in = NULL, *out = NULL;
-    char *json = NULL;
-    esp_err_t ret = ESP_OK;
-
-    if (!was_is_connected(true)) {
-        if (nc_skip) {
-            return ENOTCONN;
-        }
-    }
-
-    in = cJSON_Parse(data);
-    if (!cJSON_IsObject(in)) {
-        goto cleanup;
-    }
-
-    out = cJSON_CreateObject();
-    if (cJSON_AddStringToObject(out, "cmd", "endpoint") == NULL) {
-        ret = ESP_FAIL;
-        goto cleanup;
-    }
-
-    if (!cJSON_AddItemToObjectCS(out, "data", in)) {
-        ret = ESP_FAIL;
-        goto cleanup;
-    }
-
-    json = cJSON_Print(out);
-
-    cJSON_free(out);
-
-    ret = esp_websocket_client_send_text(
-        rust_was_client_handle(), json, strlen(json), 2000 / portTICK_PERIOD_MS);
-    cJSON_free(json);
-    if (ret < 0) {
-        ESP_LOGE(TAG, "failed to send message to WAS");
-    }
-cleanup:
-    cJSON_Delete(in);
-    return ret;
-}
-
 void request_config(void)
 {
     cJSON *cjson = NULL;
@@ -365,7 +301,7 @@ void request_config(void)
     esp_err_t ret;
 
     // not sure if we should wait here as we call request_config on WEBSOCKET_EVENT_CONNECTED
-    if (!was_is_connected(true)) {
+    if (!rust_was_is_connected(true)) {
         return;
     }
 
@@ -396,7 +332,7 @@ static void send_hello_goodbye(const char *type)
 
     ESP_LOGI(TAG, "sending WAS %s", type);
 
-    if (!was_is_connected(true)) {
+    if (!rust_was_is_connected(true)) {
         return;
     }
 
@@ -456,7 +392,7 @@ void IRAM_ATTR send_wake_start(float wake_volume)
         return;
     }
 
-    if (!was_is_connected(false)) {
+    if (!rust_was_is_connected(false)) {
         ESP_LOGW(TAG, "Websocket not connected - skipping wake start");
         return;
     }
@@ -494,7 +430,7 @@ void send_wake_end(void)
         return;
     }
 
-    if (!was_is_connected(false)) {
+    if (!rust_was_is_connected(false)) {
         ESP_LOGW(TAG, "Websocket not connected - skipping wake end");
         return;
     }
@@ -593,7 +529,7 @@ out:
         goto skip_notify_done;
     }
 
-    if (!was_is_connected(true)) {
+    if (!rust_was_is_connected(true)) {
         goto skip_notify_done;
     }
 

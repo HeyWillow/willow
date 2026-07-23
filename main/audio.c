@@ -500,7 +500,7 @@ static esp_err_t hdl_ev_hs_to_api(http_stream_event_msg_t *msg)
             }
             buf[read_len] = 0;
             ESP_LOGI(TAG, "WIS HTTP Response = %s", (char *)buf);
-            was_send_endpoint(buf, false);
+            rust_was_send_endpoint(buf);
 
             cJSON *cjson = cJSON_Parse(buf);
             cJSON *text = cJSON_GetObjectItemCaseSensitive(cjson, "text");
