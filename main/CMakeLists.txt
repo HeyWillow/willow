@@ -11,6 +11,8 @@ idf_component_register(
         audio_recorder
         audio_sal
         audio_stream
+        esp_audio_codec
+        esp_codec_dev
         esp_eth
         esp_http_client
         esp_peripherals

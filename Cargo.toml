@@ -51,6 +51,7 @@ component_dirs = [
   "deps/esp-adf/components/display_service",
   "deps/esp-adf/components/dueros_service",
   "deps/esp-adf/components/esp-adf-libs",
+  "deps/esp-adf/components/esp-adf-libs/esp_audio_codec",
   "deps/esp-adf/components/esp_actions",
   "deps/esp-adf/components/esp_codec_dev",
   "deps/esp-adf/components/esp_dispatcher",
@@ -62,6 +63,10 @@ component_dirs = [
   "deps/esp-adf/components/wifi_service",
 ]
 bindings_header = "bindings.h"
+
+[[package.metadata.esp-idf-sys.extra_components]]
+bindings_header = "audio_codec_bindings.h"
+bindings_module = "audio_codec"
 
 [[package.metadata.esp-idf-sys.extra_components]]
 bindings_header = "esp_sr_bindings.h"
