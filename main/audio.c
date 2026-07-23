@@ -9,7 +9,6 @@
 #include "esp_decoder.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "esp_timer.h"
 #include "filter_resample.h"
 #include "flac_decoder.h"
 #include "http_stream.h"
@@ -28,7 +27,6 @@
 #include "config.h"
 #include "rust.h"
 #include "shared.h"
-#include "timer.h"
 #include "was.h"
 
 #define DEFAULT_AUDIO_CODEC         "PCM"
@@ -58,7 +56,6 @@ audio_hal_handle_t hdl_aha = NULL, hdl_ahc = NULL;
 audio_rec_handle_t hdl_ar = NULL;
 esp_audio_handle_t hdl_ea = NULL;
 _Atomic bool multiwake_won = false;
-_Atomic bool recording = false;
 static audio_element_handle_t hdl_ae_hs, hdl_ae_rs_from_i2s, hdl_ae_rs_to_api = NULL;
 static audio_pipeline_handle_t hdl_ap, hdl_ap_to_api;
 static audio_thread_t hdl_at = NULL;
@@ -349,16 +346,14 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
     switch (are->type) {
         case AUDIO_REC_VAD_END:
             ESP_LOGI(TAG, "AUDIO_REC_VAD_END");
-            if (esp_timer_is_active(hdl_sess_timer)) {
-                esp_timer_stop(hdl_sess_timer);
-            }
+            rust_audio_session_timer_cancel();
             break;
         case AUDIO_REC_VAD_START:
             ESP_LOGI(TAG, "AUDIO_REC_VAD_START");
-            if (recording) {
+            if (rust_audio_is_recording()) {
                 break;
             } else {
-                recording = true;
+                rust_audio_set_recording(true);
             }
 
             msg = MSG_START;
@@ -372,7 +367,7 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
             break;
         case AUDIO_REC_WAKEUP_START:
             ESP_LOGI(TAG, "AUDIO_REC_WAKEUP_START");
-            if (recording) {
+            if (rust_audio_is_recording()) {
                 break;
             }
             if (!config_get_bool("multiwake", false)) {
@@ -386,7 +381,8 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
             ESP_LOGI(TAG, "wake volume: %f", wake_data->data_volume);
             send_wake_start(wake_data->data_volume);
             rust_display_timer_reset(true);
-            reset_timer(hdl_sess_timer, config_get_int("stream_timeout", DEFAULT_STREAM_TIMEOUT), false);
+            rust_audio_session_timer_reset(
+                hdl_ar, config_get_int("stream_timeout", DEFAULT_STREAM_TIMEOUT));
             rust_ui_show_listening();
             rust_backlight_set(true, false);
             break;
@@ -776,7 +772,7 @@ static void at_read(void *data)
             switch (msg) {
                 case MSG_START:
                     delay = 0;
-                    recording = true;
+                    rust_audio_set_recording(true);
                     audio_pipeline_stop(hdl_ap_to_api);
                     audio_pipeline_wait_for_stop(hdl_ap_to_api);
                     audio_pipeline_reset_ringbuffer(hdl_ap_to_api);
@@ -791,9 +787,10 @@ static void at_read(void *data)
                     init_adc();
                     break;
                 case MSG_STOP:
+                    rust_audio_session_timer_cancel();
                     delay = portMAX_DELAY;
                     audio_element_set_ringbuf_done(hdl_ae_rs_to_api);
-                    recording = false;
+                    rust_audio_set_recording(false);
                     stream_to_api = false;
                     rust_ui_show_thinking(multiwake_won);
                     rust_display_timer_reset(false);
@@ -888,7 +885,6 @@ esp_err_t init_audio(void)
     }
 
     init_audio_response();
-    init_session_timer();
     init_ap_to_api();
     ESP_RETURN_ON_ERROR(start_rec(), TAG, "start_rec failed");
     hdl_aha->audio_codec_set_volume(config_get_int("mic_gain", DEFAULT_MIC_GAIN));
@@ -925,6 +921,7 @@ esp_err_t init_audio(void)
 
 void deinit_audio(void)
 {
+    rust_audio_session_timer_cancel();
     if (hdl_ar != NULL) {
         audio_recorder_destroy(hdl_ar);
     }

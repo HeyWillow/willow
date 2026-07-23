@@ -10,6 +10,10 @@
 #include "freertos/queue.h"
 
 QueueHandle_t rust_audio_recorder_queue_handle(void);
+bool rust_audio_is_recording(void);
+esp_err_t rust_audio_session_timer_cancel(void);
+esp_err_t rust_audio_session_timer_reset(void *recorder, uint32_t timeout_secs);
+void rust_audio_set_recording(bool recording);
 i2c_master_bus_handle_t rust_i2c_master_handle(void);
 void rust_backlight_set(bool on, bool maximum);
 esp_err_t rust_backlight_strobe_start(uint32_t period_ms);

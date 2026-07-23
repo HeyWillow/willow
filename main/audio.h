@@ -1,6 +1,8 @@
 #include "audio_recorder.h"
 #include "esp_audio.h"
 
+#include "audio_bindings.h"
+
 #define DEFAULT_WAKE_CONFIRMATION false
 
 struct willow_audio_response {
@@ -8,15 +10,8 @@ struct willow_audio_response {
     void (*fn_ok)(void *data);
 };
 
-typedef enum {
-    MSG_STOP,
-    MSG_START,
-    MSG_UNMUTE,
-} q_msg;
-
 extern audio_rec_handle_t hdl_ar;
 extern _Atomic bool multiwake_won;
-extern _Atomic bool recording;
 extern esp_audio_handle_t hdl_ea;
 extern QueueHandle_t q_rec;
 extern struct willow_audio_response war;

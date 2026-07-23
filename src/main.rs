@@ -63,6 +63,9 @@ fn main() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize recorder queue: {error}");
         unsafe { esp_idf_sys::esp_system_abort(c"recorder queue initialization failed".as_ptr()) }
     }
+    if let Err(error) = audio::initialize_session_timer() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize session timer: {error}");
+    }
     if let Err(error) = i2c::init() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize I2C0 master bus: {error}");
         unsafe { esp_idf_sys::esp_system_abort(c"I2C0 initialization failed".as_ptr()) }
