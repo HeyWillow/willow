@@ -1,10 +1,14 @@
+#include "esp_event.h"
 #include "esp_netif_types.h"
+
+#include "was_bindings.h"
 
 extern esp_netif_t *hdl_netif;
 extern char was_url[2048];
 
 void deinit_was(void);
-esp_err_t init_was(void);
+void willow_was_event_handler(
+    void *arg, esp_event_base_t event_base, int32_t event_id, void *event_data);
 esp_err_t was_send_endpoint(const char *json, bool nc_skip);
 void request_config(void);
 void send_wake_start(float wake_volume);

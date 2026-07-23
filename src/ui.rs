@@ -1143,13 +1143,6 @@ unsafe fn text<'a>(pointer: *const c_char) -> Option<Cow<'a, str>> {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ui_show_connecting(message: *const c_char) {
-    if let Some(message) = unsafe { text(message) } {
-        show_connecting(&message);
-    }
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn rust_ui_hide_connecting() {
     hide_connecting();
 }

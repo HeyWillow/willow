@@ -27,7 +27,7 @@ void willow_init(void)
             vTaskDelay(portMAX_DELAY);
         }
     }
-    err = init_was();
+    err = rust_was_init(was_url);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to initialize Willow Application Server connection");
         rust_ui_show_error("Fatal error!", "WAS initialization failed.");

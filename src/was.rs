@@ -1,10 +1,30 @@
 //! Willow Application Server transport ownership.
 
-use std::sync::OnceLock;
+use core::{
+    ffi::{c_char, c_void},
+    sync::atomic::{AtomicPtr, Ordering},
+};
+use std::{
+    ffi::{CStr, CString},
+    sync::OnceLock,
+};
 
 use esp_idf_sys::{
-    ESP_ERR_NO_MEM, EspError, SemaphoreHandle_t, WILLOW_QUEUE_TYPE_MUTEX, xQueueCreateMutex,
+    ESP_ERR_INVALID_ARG, ESP_ERR_NO_MEM, ESP_OK, EspError, SemaphoreHandle_t,
+    WAS_RECONNECT_TIMEOUT_MS, WILLOW_QUEUE_TYPE_MUTEX, esp_err_t, esp_event_base_t,
+    esp_log_level_set, esp_log_level_t_ESP_LOG_DEBUG, esp_websocket_client,
+    esp_websocket_client_config_t, esp_websocket_client_destroy_on_exit,
+    esp_websocket_client_handle_t, esp_websocket_client_init, esp_websocket_client_start,
+    esp_websocket_event_id_t_WEBSOCKET_EVENT_ANY, esp_websocket_register_events, xQueueCreateMutex,
 };
+use log::{error, info, warn};
+
+use crate::{state, ui};
+
+const LOG_TARGET: &str = "WILLOW/WAS";
+const USER_AGENT: &str = concat!("Willow/", env!("WILLOW_VERSION"));
+
+static CLIENT: AtomicPtr<esp_websocket_client> = AtomicPtr::new(core::ptr::null_mut());
 
 struct NotificationMutex(SemaphoreHandle_t);
 
@@ -14,6 +34,15 @@ unsafe impl Send for NotificationMutex {}
 unsafe impl Sync for NotificationMutex {}
 
 static NOTIFICATION_MUTEX: OnceLock<NotificationMutex> = OnceLock::new();
+
+unsafe extern "C" {
+    fn willow_was_event_handler(
+        arg: *mut c_void,
+        event_base: esp_event_base_t,
+        event_id: i32,
+        event_data: *mut c_void,
+    );
+}
 
 fn notification_mutex() -> Result<SemaphoreHandle_t, EspError> {
     let mutex = NOTIFICATION_MUTEX.get_or_init(|| {
@@ -25,6 +54,92 @@ fn notification_mutex() -> Result<SemaphoreHandle_t, EspError> {
     } else {
         Ok(mutex.0)
     }
+}
+
+pub(crate) fn client_handle() -> esp_websocket_client_handle_t {
+    CLIENT.load(Ordering::Acquire)
+}
+
+pub(crate) fn initialize(url: &str) -> Result<(), EspError> {
+    if state::is_restarting() {
+        return Ok(());
+    }
+
+    // Preserve the advisory allocation failure. The retained C notification
+    // paths will receive the same null handle that they did previously.
+    let _ = notification_mutex();
+
+    let url = CString::new(url).map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
+    let user_agent = CString::new(USER_AGENT).unwrap();
+
+    ui::show_connecting("Connecting to WAS...");
+
+    unsafe {
+        esp_log_level_set(c"WILLOW/WAS".as_ptr(), esp_log_level_t_ESP_LOG_DEBUG);
+    }
+    info!(
+        target: LOG_TARGET,
+        "initializing WebSocket client ({})",
+        url.to_string_lossy()
+    );
+
+    let config = esp_websocket_client_config_t {
+        buffer_size: 4096,
+        reconnect_timeout_ms: WAS_RECONNECT_TIMEOUT_MS as i32,
+        task_stack: 6 * 1024,
+        uri: url.as_ptr(),
+        user_agent: user_agent.as_ptr(),
+        ..Default::default()
+    };
+
+    let client = unsafe { esp_websocket_client_init(&config) };
+    CLIENT.store(client, Ordering::Release);
+
+    if let Some(error) = EspError::from(unsafe { esp_websocket_client_destroy_on_exit(client) }) {
+        warn!(target: LOG_TARGET, "failed to enable destroy on exit: {error}");
+    }
+
+    // Preserve the ignored event-registration result from the C initializer.
+    let _ = unsafe {
+        esp_websocket_register_events(
+            client,
+            esp_websocket_event_id_t_WEBSOCKET_EVENT_ANY,
+            Some(willow_was_event_handler),
+            core::ptr::null_mut(),
+        )
+    };
+
+    if let Some(error) = EspError::from(unsafe { esp_websocket_client_start(client) }) {
+        error!(target: LOG_TARGET, "failed to start WebSocket client: {error}");
+        Err(error)
+    } else {
+        Ok(())
+    }
+}
+
+/// Initializes the WAS transport from a URL borrowed from retained C startup.
+///
+/// # Safety
+///
+/// `url` must point to a valid NUL-terminated string for the duration of this
+/// call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_was_init(url: *const c_char) -> esp_err_t {
+    if url.is_null() {
+        return ESP_ERR_INVALID_ARG;
+    }
+
+    let Ok(url) = (unsafe { CStr::from_ptr(url) }).to_str() else {
+        return ESP_ERR_INVALID_ARG;
+    };
+
+    initialize(url).map_or_else(|error| error.code(), |()| ESP_OK)
+}
+
+/// Returns the current raw client handle to the retained C transport users.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_was_client_handle() -> esp_websocket_client_handle_t {
+    client_handle()
 }
 
 /// Returns the firmware-lifetime mutex borrowed by the retained C notification

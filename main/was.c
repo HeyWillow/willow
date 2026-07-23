@@ -13,10 +13,7 @@
 #include "shared.h"
 #include "was.h"
 
-#define WAS_RECONNECT_TIMEOUT_MS 10 * 1000
-
 static const char *TAG = "WILLOW/WAS";
-static esp_websocket_client_handle_t hdl_wc = NULL;
 static struct notify_data *notify_active;
 
 esp_netif_t *hdl_netif;
@@ -36,7 +33,8 @@ struct notify_data {
 static void notify_task(void *data);
 static void send_hello_goodbye(const char *type);
 
-static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, const int32_t id_ev, const void *ev_data)
+void willow_was_event_handler(
+    void *arg_evh, esp_event_base_t base_ev, int32_t id_ev, void *ev_data)
 {
     esp_websocket_event_data_t *data = (esp_websocket_event_data_t *)ev_data;
     // components/esp_websocket_client/include/esp_websocket_client.h - enum esp_websocket_event_id_t
@@ -258,7 +256,7 @@ cleanup:
             break;
         case WEBSOCKET_EVENT_CLOSED:
             ESP_LOGI(TAG, "WebSocket closed");
-            init_was();
+            rust_was_init(was_url);
             break;
         default:
             ESP_LOGD(TAG, "unhandled WebSocket event - ID: %" PRIu32, id_ev);
@@ -269,13 +267,14 @@ cleanup:
 void was_deinit_task(void *data)
 {
     esp_err_t ret = ESP_OK;
+    esp_websocket_client_handle_t client = rust_was_client_handle();
     ESP_LOGI(TAG, "stopping WebSocket client");
 
-    ret = esp_websocket_client_close(hdl_wc, 5000 / portTICK_PERIOD_MS);
+    ret = esp_websocket_client_close(client, 5000 / portTICK_PERIOD_MS);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "failed to cleanly close WebSocket client");
 
-        ret = esp_websocket_client_stop(hdl_wc);
+        ret = esp_websocket_client_stop(client);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "failed to stop WebSocket client: %s", esp_err_to_name(ret));
         }
@@ -295,54 +294,16 @@ void deinit_was(void)
     vTaskDelay(2000 / portTICK_PERIOD_MS);
 }
 
-esp_err_t init_was(void)
-{
-    if (rust_state_is_restarting()) {
-        return ESP_OK;
-    }
-
-    rust_was_notify_mutex();
-
-    const esp_websocket_client_config_t cfg_wc = {
-        .buffer_size = 4096,
-        .reconnect_timeout_ms = WAS_RECONNECT_TIMEOUT_MS,
-        .task_stack = 6 * 1024, // default 4 * 1024
-        .uri = was_url,
-        .user_agent = WILLOW_USER_AGENT,
-    };
-    esp_err_t err = ESP_OK;
-
-    rust_ui_show_connecting("Connecting to WAS...");
-
-    esp_log_level_set(TAG, ESP_LOG_DEBUG);
-    ESP_LOGI(TAG, "initializing WebSocket client (%s)", was_url);
-
-    hdl_wc = esp_websocket_client_init(&cfg_wc);
-
-    err = esp_websocket_client_destroy_on_exit(hdl_wc);
-    if (err != ESP_OK) {
-        ESP_LOGW(TAG, "failed to enable destroy on exit: %s", esp_err_to_name(err));
-    }
-
-    esp_websocket_register_events(hdl_wc, WEBSOCKET_EVENT_ANY, (esp_event_handler_t)cb_ws_event, NULL);
-    err = esp_websocket_client_start(hdl_wc);
-
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "failed to start WebSocket client: %s", esp_err_to_name(err));
-    }
-    return err;
-}
-
 static bool was_is_connected(const bool wait)
 {
-    if (esp_websocket_client_is_connected(hdl_wc)) {
+    if (esp_websocket_client_is_connected(rust_was_client_handle())) {
         return true;
     }
 
     if (wait) {
         int max = WAS_RECONNECT_TIMEOUT_MS / 1000;
         for (int i = 0; i < max; i++) {
-            if (esp_websocket_client_is_connected(hdl_wc)) {
+            if (esp_websocket_client_is_connected(rust_was_client_handle())) {
                 return true;
             }
             i++;
@@ -386,7 +347,8 @@ esp_err_t was_send_endpoint(const char *data, bool nc_skip)
 
     cJSON_free(out);
 
-    ret = esp_websocket_client_send_text(hdl_wc, json, strlen(json), 2000 / portTICK_PERIOD_MS);
+    ret = esp_websocket_client_send_text(
+        rust_was_client_handle(), json, strlen(json), 2000 / portTICK_PERIOD_MS);
     cJSON_free(json);
     if (ret < 0) {
         ESP_LOGE(TAG, "failed to send message to WAS");
@@ -414,7 +376,8 @@ void request_config(void)
 
     json = cJSON_Print(cjson);
 
-    ret = esp_websocket_client_send_text(hdl_wc, json, strlen(json), 2000 / portTICK_PERIOD_MS);
+    ret = esp_websocket_client_send_text(
+        rust_was_client_handle(), json, strlen(json), 2000 / portTICK_PERIOD_MS);
     cJSON_free(json);
     if (ret < 0) {
         ESP_LOGE(TAG, "failed to send WAS get_config message");
@@ -472,7 +435,8 @@ static void send_hello_goodbye(const char *type)
 
     json = cJSON_Print(cjson);
 
-    ret = esp_websocket_client_send_text(hdl_wc, json, strlen(json), 2000 / portTICK_PERIOD_MS);
+    ret = esp_websocket_client_send_text(
+        rust_was_client_handle(), json, strlen(json), 2000 / portTICK_PERIOD_MS);
     cJSON_free(json);
     if (ret < 0) {
         ESP_LOGE(TAG, "failed to send WAS %s message", type);
@@ -509,7 +473,8 @@ void IRAM_ATTR send_wake_start(float wake_volume)
 
     json = cJSON_Print(cjson);
 
-    ret = esp_websocket_client_send_text(hdl_wc, json, strlen(json), 2000 / portTICK_PERIOD_MS);
+    ret = esp_websocket_client_send_text(
+        rust_was_client_handle(), json, strlen(json), 2000 / portTICK_PERIOD_MS);
     cJSON_free(json);
     if (ret < 0) {
         ESP_LOGE(TAG, "failed to send WAS wake_start message");
@@ -543,7 +508,8 @@ void send_wake_end(void)
 
     json = cJSON_Print(cjson);
 
-    ret = esp_websocket_client_send_text(hdl_wc, json, strlen(json), 2000 / portTICK_PERIOD_MS);
+    ret = esp_websocket_client_send_text(
+        rust_was_client_handle(), json, strlen(json), 2000 / portTICK_PERIOD_MS);
     cJSON_free(json);
     if (ret < 0) {
         ESP_LOGE(TAG, "failed to send WAS wake_end message");
@@ -638,7 +604,8 @@ out:
 
     json = cJSON_Print(cjson);
 
-    ret = esp_websocket_client_send_text(hdl_wc, json, strlen(json), 2000 / portTICK_PERIOD_MS);
+    ret = esp_websocket_client_send_text(
+        rust_was_client_handle(), json, strlen(json), 2000 / portTICK_PERIOD_MS);
     cJSON_free(json);
     if (ret < 0) {
         ESP_LOGE(TAG, "failed to send WAS notify_done message");

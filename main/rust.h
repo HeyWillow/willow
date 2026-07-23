@@ -6,6 +6,7 @@
 
 #include "esp_err.h"
 #include "esp_netif.h"
+#include "esp_websocket_client.h"
 #include "driver/i2c_master.h"
 #include "freertos/queue.h"
 #include "freertos/semphr.h"
@@ -34,15 +35,15 @@ bool rust_nvs_read_was_url(char *output, size_t output_len);
 bool rust_ota_install(const char *url);
 const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
-bool rust_state_is_restarting(void);
 void rust_state_mark_restarting(void);
+esp_websocket_client_handle_t rust_was_client_handle(void);
+esp_err_t rust_was_init(const char *url);
 SemaphoreHandle_t rust_was_notify_mutex(void);
 void rust_ui_hide_connecting(void);
 void rust_ui_notification_end(void);
 bool rust_ui_notification_cancelled(void);
 void rust_ui_show_center_message(const char *message);
 void rust_ui_show_command_result(const char *heading, const char *body);
-void rust_ui_show_connecting(const char *message);
 void rust_ui_show_error(const char *primary, const char *secondary);
 void rust_ui_show_listening(void);
 void rust_ui_show_notification(const char *message, void *player);
