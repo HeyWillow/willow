@@ -71,6 +71,7 @@ fn main() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
     ffi::init();
+    net::log_mac_address();
 
     log::info!(
         target: "WILLOW/MAIN",

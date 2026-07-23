@@ -12,7 +12,8 @@ use std::{
 
 use esp_idf_sys::{
     CONFIG_LWIP_LOCAL_HOSTNAME, ESP_ERR_INVALID_ARG, ESP_OK, EspError, esp_err_t, esp_event_base_t,
-    esp_mac_type_t, esp_netif_init, esp_netif_set_hostname, esp_netif_t, esp_read_mac,
+    esp_mac_type_t, esp_mac_type_t_ESP_MAC_ETH, esp_mac_type_t_ESP_MAC_WIFI_STA, esp_netif_init,
+    esp_netif_set_hostname, esp_netif_t, esp_read_mac,
 };
 use log::{error, info};
 
@@ -25,6 +26,11 @@ use crate::crypto;
 use esp_idf_sys::vTaskDelay;
 
 const LOG_TARGET: &str = "WILLOW/NETWORK";
+const NETWORK_MAC_TYPE: esp_mac_type_t = if cfg!(esp_idf_willow_ethernet) {
+    esp_mac_type_t_ESP_MAC_ETH
+} else {
+    esp_mac_type_t_ESP_MAC_WIFI_STA
+};
 #[cfg(not(esp_idf_willow_ethernet))]
 const NVS_LOG_TARGET: &str = "WILLOW/MAIN";
 
@@ -71,6 +77,20 @@ pub(crate) fn initialize() -> Result<Option<NonNull<esp_netif_t>>, EspError> {
     crypto::initialize();
 
     Ok(network_interface)
+}
+
+/// Reads and logs the configured transport's ESP-derived MAC address.
+pub(crate) fn log_mac_address() {
+    let mut address = [0; 6];
+    if let Some(error) =
+        EspError::from(unsafe { esp_read_mac(address.as_mut_ptr(), NETWORK_MAC_TYPE) })
+    {
+        error!(target: LOG_TARGET, "failed to read MAC address: {error}");
+        return;
+    }
+
+    let [a, b, c, d, e, f] = address;
+    info!(target: LOG_TARGET, "MAC address: {a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}");
 }
 
 /// Compatibility entry point for C-owned WAS initialization.

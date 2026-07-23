@@ -23,10 +23,10 @@ use esp_idf_sys::{
     WIFI_SOFTAP_BEACON_MAX_LEN, WIFI_STA_DISCONNECTED_PM_ENABLED, WIFI_STATIC_TX_BUFFER_NUM,
     WIFI_TASK_CORE_ID, WIFI_TX_HETB_QUEUE_NUM, esp_err_t, esp_event_base_t,
     esp_event_handler_register, esp_mac_type_t_ESP_MAC_WIFI_STA, esp_netif_create_default_wifi_sta,
-    esp_netif_t, esp_wifi_connect, esp_wifi_get_mac, esp_wifi_init, esp_wifi_set_config,
-    esp_wifi_set_ps, esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_osi_funcs,
-    ip_event_got_ip_t, ip_event_t_IP_EVENT_STA_GOT_IP, wifi_auth_mode_t_WIFI_AUTH_WPA2_PSK,
-    wifi_config_t, wifi_event_sta_connected_t, wifi_event_sta_disconnected_t,
+    esp_netif_t, esp_wifi_connect, esp_wifi_init, esp_wifi_set_config, esp_wifi_set_ps,
+    esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_osi_funcs, ip_event_got_ip_t,
+    ip_event_t_IP_EVENT_STA_GOT_IP, wifi_auth_mode_t_WIFI_AUTH_WPA2_PSK, wifi_config_t,
+    wifi_event_sta_connected_t, wifi_event_sta_disconnected_t,
     wifi_event_t_WIFI_EVENT_STA_CONNECTED as WIFI_EVENT_STA_CONNECTED,
     wifi_event_t_WIFI_EVENT_STA_DISCONNECTED as WIFI_EVENT_STA_DISCONNECTED,
     wifi_event_t_WIFI_EVENT_STA_START as WIFI_EVENT_STA_START, wifi_init_config_t,
@@ -193,20 +193,6 @@ fn wifi_init_configuration() -> wifi_init_config_t {
             magic: WIFI_INIT_CONFIG_MAGIC as i32,
         }
     }
-}
-
-/// Reads and logs the station MAC address through ESP-IDF.
-pub(crate) fn log_mac_address() {
-    let mut address = [0; 6];
-    let _ = unsafe { esp_wifi_get_mac(WIFI_IF_STA, address.as_mut_ptr()) };
-    let [a, b, c, d, e, f] = address;
-    info!(target: LOG_TARGET, "MAC address: {a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}");
-}
-
-/// Compatibility entry point for the remaining C startup path.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_get_mac_address() {
-    log_mac_address();
 }
 
 /// Handles the ESP-IDF station-address event and releases the connection wait.

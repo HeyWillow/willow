@@ -1,6 +1,5 @@
 #include "esp_err.h"
 #include "esp_log.h"
-#include "sdkconfig.h"
 
 #include "audio.h"
 #include "config.h"
@@ -42,10 +41,6 @@ void willow_init(void)
     init_audio();
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_timer_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_ui_touch_init(MSG_STOP));
-
-#ifndef CONFIG_WILLOW_ETHERNET
-    rust_get_mac_address(); // should be on wifi by now; print the MAC
-#endif
 }
 
 #ifdef WILLOW_CARGO_FIRST
