@@ -8,11 +8,13 @@ use std::rc::Rc;
 
 use esp_idf_sys::esp_sr as raw;
 use sha2::{Digest, Sha256};
+use willow_schema::config::v1::{VadMode, WakeMode};
 
+use super::configuration::AfeConfiguration;
 use super::fixture::{PACK_HEADER_LENGTH, PackedFile, validate_pack};
 use super::{
     AfeRuntimeError, FeedStatus, FetchedFrame, FrameSpec, InputFormat, Sha256Digest, SrError,
-    VadState, WakeDetection, WakeModel, WakeState,
+    VadState, WakeDetection, WakeState,
 };
 
 const EXPECTED_PARTITION_ADDRESS: u32 = 0x0063_0000;
@@ -34,7 +36,9 @@ pub(super) struct Frontend {
 }
 
 impl Frontend {
-    pub(super) fn open(model: WakeModel, input: InputFormat) -> Result<Self, SrError> {
+    pub(super) fn open(configuration: AfeConfiguration) -> Result<Self, SrError> {
+        let input = configuration.input;
+        let model = configuration.model;
         validate_input(input)?;
 
         let partition_label = CString::new(c"model".to_bytes())
@@ -57,7 +61,7 @@ impl Frontend {
         let interface = AfeInterface::load()?;
         interface.validate_required_functions()?;
 
-        let mut config = make_config(selected_model.name, input)?;
+        let mut config = make_config(selected_model.name, configuration)?;
         let afe = interface.create(&mut config)?;
         let frame_spec = afe.query_frame_spec(input)?;
 
@@ -619,10 +623,7 @@ impl Drop for AfeLease {
 }
 
 fn validate_input(input: InputFormat) -> Result<(), SrError> {
-    if input.sample_rate != 16_000
-        || input.microphone_channels != 2
-        || input.reference_channels != 0
-    {
+    if input != InputFormat::WILLOW {
         return Err(SrError::UnsupportedInputFormat(input));
     }
     let _ = input.total_channels()?;
@@ -631,20 +632,21 @@ fn validate_input(input: InputFormat) -> Result<(), SrError> {
 
 fn make_config(
     model_name: *mut core::ffi::c_char,
-    input: InputFormat,
+    configuration: AfeConfiguration,
 ) -> Result<raw::afe_config_t, SrError> {
+    let input = configuration.input;
     Ok(raw::afe_config_t {
-        aec_init: false,
-        se_init: true,
+        aec_init: configuration.acoustic_echo_cancellation,
+        se_init: configuration.blind_source_separation,
         vad_init: true,
         wakenet_init: true,
         voice_communication_init: false,
         voice_communication_agc_init: false,
         voice_communication_agc_gain: 15,
-        vad_mode: raw::vad_mode_t_VAD_MODE_3,
+        vad_mode: map_vad_mode(configuration.vad_mode),
         wakenet_model_name: model_name,
         wakenet_model_name_2: core::ptr::null_mut(),
-        wakenet_mode: raw::det_mode_t_DET_MODE_2CH_90,
+        wakenet_mode: map_wake_mode(configuration.wake_mode),
         afe_mode: raw::afe_sr_mode_t_SR_MODE_HIGH_PERF,
         afe_perferred_core: 1,
         afe_perferred_priority: 5,
@@ -675,8 +677,29 @@ fn make_config(
         ],
         afe_ns_mode: raw::afe_ns_mode_t_NS_MODE_SSP,
         afe_ns_model_name: core::ptr::null_mut(),
-        fixed_first_channel: true,
+        fixed_first_channel: false,
     })
+}
+
+const fn map_vad_mode(mode: VadMode) -> raw::vad_mode_t {
+    match mode {
+        VadMode::Mode0 => raw::vad_mode_t_VAD_MODE_0,
+        VadMode::Mode1 => raw::vad_mode_t_VAD_MODE_1,
+        VadMode::Mode2 => raw::vad_mode_t_VAD_MODE_2,
+        VadMode::Mode3 => raw::vad_mode_t_VAD_MODE_3,
+        VadMode::Mode4 => raw::vad_mode_t_VAD_MODE_4,
+    }
+}
+
+const fn map_wake_mode(mode: WakeMode) -> raw::det_mode_t {
+    match mode {
+        WakeMode::OneChannel90 => raw::det_mode_t_DET_MODE_90,
+        WakeMode::OneChannel95 => raw::det_mode_t_DET_MODE_95,
+        WakeMode::TwoChannel90 => raw::det_mode_t_DET_MODE_2CH_90,
+        WakeMode::TwoChannel95 => raw::det_mode_t_DET_MODE_2CH_95,
+        WakeMode::ThreeChannel90 => raw::det_mode_t_DET_MODE_3CH_90,
+        WakeMode::ThreeChannel95 => raw::det_mode_t_DET_MODE_3CH_95,
+    }
 }
 
 fn call_dimension(name: &'static str, value: i32) -> Result<usize, SrError> {

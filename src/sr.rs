@@ -7,6 +7,7 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 #![deny(clippy::undocumented_unsafe_blocks)]
 
+mod configuration;
 mod ffi;
 mod fixture;
 
@@ -14,6 +15,8 @@ use core::fmt;
 use core::mem::{align_of, size_of};
 
 use esp_idf_sys::esp_sr;
+
+use configuration::AfeConfiguration;
 
 #[cfg(target_pointer_width = "32")]
 const _: () = {
@@ -90,10 +93,10 @@ struct InputFormat {
 }
 
 impl InputFormat {
-    const BOX3_WAKE_ONLY: Self = Self {
+    const WILLOW: Self = Self {
         sample_rate: 16_000,
         microphone_channels: 2,
-        reference_channels: 0,
+        reference_channels: 1,
     };
 
     fn total_channels(self) -> Result<usize, SrError> {
@@ -218,8 +221,9 @@ struct SpeechFrontend {
 }
 
 impl SpeechFrontend {
-    fn open(model: WakeModel, input: InputFormat) -> Result<Self, SrError> {
-        ffi::Frontend::open(model, input).map(|inner| Self { inner })
+    fn open() -> Result<Self, SrError> {
+        let configuration = AfeConfiguration::from_active_config()?;
+        ffi::Frontend::open(configuration).map(|inner| Self { inner })
     }
 
     const fn frame_spec(&self) -> FrameSpec {
@@ -268,6 +272,7 @@ enum SrError {
     ExternalModelState,
     ModelLoadFailed,
     MissingWakeModel(String),
+    UnsupportedWakeWord(String),
     InvalidModelList(&'static str),
     MissingAfeFunction(&'static str),
     AfeCreateFailed,
@@ -336,6 +341,12 @@ impl fmt::Display for SrError {
             Self::MissingWakeModel(model) => {
                 write!(formatter, "{model} is absent from the model pack")
             }
+            Self::UnsupportedWakeWord(wake_word) => {
+                write!(
+                    formatter,
+                    "configured wake word {wake_word:?} is not supported"
+                )
+            }
             Self::InvalidModelList(reason) => {
                 write!(formatter, "ESP-SR returned an invalid model list: {reason}")
             }
@@ -344,11 +355,11 @@ impl fmt::Display for SrError {
             }
             Self::AfeCreateFailed => write!(
                 formatter,
-                "ESP-SR could not create the 16 kHz, two-microphone, zero-reference AFE"
+                "ESP-SR could not create the 16 kHz, two-microphone, one-reference AFE"
             ),
             Self::UnsupportedInputFormat(input) => write!(
                 formatter,
-                "unsupported first-slice input: {} Hz, {} microphones, {} references",
+                "unsupported Willow AFE input: {} Hz, {} microphones, {} references",
                 input.sample_rate, input.microphone_channels, input.reference_channels
             ),
             Self::InvalidAfeDimension(name) => {
