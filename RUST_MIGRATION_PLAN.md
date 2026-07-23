@@ -24,11 +24,11 @@ Every commit must remain buildable, small, reviewable, and build-tested.
   upgrades ESP-SR, is explicitly deferred.
 - An ESP-SR 2.x upgrade requires a later WAS change that can update and
   atomically activate the `srmodels` partition.
-- ESP-IDF remains at 5.3.4 because this migration currently provides no
-  concrete reason to upgrade it.
-- Other Espressif components may be upgraded only in isolated commits when
-  there is a concrete migration benefit and the upgrade is proven not to
-  change ESP-SR or `srmodels.bin`.
+- ESP-IDF and other Espressif components may be upgraded only in isolated
+  commits when there is a concrete migration benefit and the upgrade is
+  proven not to require ESP-SR 2.x or change `srmodels.bin`.
+- ESP-IDF remains at 5.3.4 for now because this migration currently provides
+  no concrete reason to upgrade it.
 
 Two component upgrades are justified:
 
