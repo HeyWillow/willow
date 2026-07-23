@@ -10,6 +10,7 @@ mod codecs;
 mod es7210;
 mod i2s;
 mod pcm;
+mod stream_codec;
 
 use core::{ffi::c_void, ptr::NonNull};
 use std::{
