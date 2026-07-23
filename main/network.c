@@ -48,28 +48,24 @@ void cb_sntp(struct timeval *tv)
     }
 }
 
-void set_hostname(esp_mac_type_t emt)
+void set_hostname(esp_netif_t *netif, esp_mac_type_t mac_type)
 {
     esp_err_t ret = ESP_OK;
     uint8_t mac[MAC_ADDR_SIZE];
 
-    ret = esp_read_mac(mac, emt);
+    ret = esp_read_mac(mac, mac_type);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "failed to read MAC address, using default hostname (%s)", CONFIG_LWIP_LOCAL_HOSTNAME);
         return;
     }
 
-    while (esp_netif_get_nr_of_ifs() == 0) {
-        vTaskDelay(100 / portTICK_PERIOD_MS);
-    }
-
     char hostname[HOSTNAME_SIZE];
-    hdl_netif = esp_netif_next_unsafe(NULL);
+    hdl_netif = netif;
 
     snprintf(hostname, HOSTNAME_SIZE, "willow-%02x%02x%02x%02x%02x%02x", mac[0], mac[1], mac[2], mac[3], mac[4],
              mac[5]);
 
-    ret = esp_netif_set_hostname(hdl_netif, hostname);
+    ret = esp_netif_set_hostname(netif, hostname);
     if (ret != ESP_OK) {
         ESP_LOGE(TAG, "failed to set hostname (%s): %s", hostname, esp_err_to_name(ret));
     }
@@ -218,7 +214,7 @@ esp_err_t init_wifi(const char *psk, const char *ssid)
     strlcpy((char *)cfg_wifi.sta.password, psk, sizeof(cfg_wifi.sta.password));
     strlcpy((char *)cfg_wifi.sta.ssid, ssid, sizeof(cfg_wifi.sta.ssid));
 
-    set_hostname(ESP_MAC_WIFI_STA);
+    set_hostname(netif_wifi, ESP_MAC_WIFI_STA);
 
     ret = esp_wifi_set_config(ESP_IF_WIFI_STA, &cfg_wifi);
     if (ret != ESP_OK) {
