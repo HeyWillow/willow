@@ -45,19 +45,11 @@ impl Drop for I2cBus {
 static I2C_BUS: OnceLock<I2cBus> = OnceLock::new();
 
 /// An addressed device attached to the shared Rust-owned I2C0 master bus.
-#[allow(
-    dead_code,
-    reason = "the Rust codec migration will consume this prepared owner"
-)]
 pub(crate) struct I2cDevice {
     address: u16,
     handle: usize,
 }
 
-#[allow(
-    dead_code,
-    reason = "the Rust codec migration will consume this prepared owner"
-)]
 impl I2cDevice {
     /// Attaches a seven-bit-addressed device to the initialized shared bus.
     pub(crate) fn new(address: u16, scl_speed_hz: u32) -> Result<Self, EspError> {

@@ -4,6 +4,7 @@
 //! capture modules prepare the atomic Rust audio cut-over.
 
 mod capture;
+mod es7210;
 
 use core::{ffi::c_void, ptr::NonNull};
 use std::{
