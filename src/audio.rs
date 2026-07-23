@@ -1,4 +1,9 @@
-//! Rust-owned coordination resources for the retained C audio engine.
+//! Rust audio ownership and migration support.
+//!
+//! Coordination resources serve the retained C engine while the inactive
+//! capture modules prepare the atomic Rust audio cut-over.
+
+mod capture;
 
 use core::{ffi::c_void, ptr::NonNull};
 use std::{
