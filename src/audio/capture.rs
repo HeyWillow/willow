@@ -7,7 +7,7 @@
 
 use core::fmt;
 
-pub(super) const SAMPLE_RATE_HZ: u32 = 16_000;
+pub(super) const SAMPLE_RATE_HZ: u32 = super::pcm::OUTPUT_SAMPLE_RATE_HZ;
 pub(super) const PHYSICAL_SLOTS: usize = 2;
 pub(super) const SLOT_WIDTH_BITS: u32 = 32;
 pub(super) const RAW_HALFWORDS: usize = PHYSICAL_SLOTS * 2;

@@ -290,7 +290,7 @@ impl CodecInterface {
                 bits_per_sample: 32,
                 channel: 2,
                 channel_mask: 0,
-                sample_rate: 16_000,
+                sample_rate: super::capture::SAMPLE_RATE_HZ,
                 mclk_multiple: 256,
             };
             let status = unsafe { set_fs(self.as_ptr(), &raw mut sample_information) };

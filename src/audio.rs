@@ -9,6 +9,7 @@ mod codec_ffi;
 mod codecs;
 mod es7210;
 mod i2s;
+mod pcm;
 
 use core::{ffi::c_void, ptr::NonNull};
 use std::{
