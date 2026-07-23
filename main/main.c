@@ -1,6 +1,6 @@
+#include "esp_app_desc.h"
 #include "esp_err.h"
 #include "esp_log.h"
-#include "esp_ota_ops.h"
 #include "sdkconfig.h"
 
 #include "audio.h"
@@ -52,11 +52,6 @@ void willow_init(void)
     ESP_LOGI(TAG, "Startup complete! Hardware: %s. Version: %s. Waiting for wake word.",
              rust_system_hardware_name(),
              app_desc->version);
-
-    // if we reached this point, we can mark the current partition valid
-    // we can still crash on wake or other events but we should be able to do another OTA
-    // we can also still crash in the while loop below - this should be improved
-    ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ota_mark_app_valid_cancel_rollback());
 }
 
 #ifdef WILLOW_CARGO_FIRST

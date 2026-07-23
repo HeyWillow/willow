@@ -71,6 +71,13 @@ fn main() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
     ffi::init();
+
+    // Reaching this point is enough to mark the current partition valid, so
+    // it remains the boot partition after restart. Wake handling and the main
+    // loop can still fail after this point.
+    if let Err(error) = ota::mark_running_slot_valid() {
+        log::error!(target: "WILLOW/MAIN", "failed to mark running firmware valid: {error}");
+    }
     if let Err(error) = backlight::reset_display_timer(false) {
         log::error!(target: "WILLOW/MAIN", "failed to reset display timer: {error}");
     }

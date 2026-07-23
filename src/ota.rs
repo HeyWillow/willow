@@ -132,6 +132,12 @@ fn read_image_header(
     Ok(buffered)
 }
 
+/// Confirms the running firmware and cancels a pending rollback.
+pub(crate) fn mark_running_slot_valid() -> Result<(), EspError> {
+    let mut ota = EspOta::new()?;
+    ota.mark_running_slot_valid()
+}
+
 /// Downloads, validates, and installs an OTA image synchronously.
 pub(crate) fn install(url: &str) -> Result<(), InstallError> {
     info!(target: LOG_TARGET, "downloading OTA from {url}");
