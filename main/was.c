@@ -47,7 +47,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
         case WEBSOCKET_EVENT_CONNECTED:
             ESP_LOGI(TAG, "WebSocket connected");
             send_hello_goodbye("hello");
-            if (!config_valid) {
+            if (!rust_config_is_valid()) {
                 request_config();
             }
             rust_ui_hide_connecting();

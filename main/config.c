@@ -18,8 +18,6 @@
 
 static const char *TAG = "WILLOW/CONFIG";
 
-bool config_valid = false;
-
 // Rust owns the parsed, typed configuration. These calls only adapt it to the
 // existing C getter API while the remaining consumers are migrated.
 
@@ -54,11 +52,6 @@ int config_get_int(char *key, const int default_value)
     int ret = value < 0 || value > INT_MAX ? default_value : (int)value;
     ESP_LOGD(TAG, "config_get_int(%s): %d", key, ret);
     return ret;
-}
-
-void config_parse(void)
-{
-    config_valid = rust_config_load();
 }
 
 void config_write(const char *data)

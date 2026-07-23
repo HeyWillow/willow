@@ -34,7 +34,6 @@ void willow_init(void)
 {
     esp_err_t err;
 
-    config_parse();
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_ui_init());
 
@@ -105,7 +104,7 @@ void willow_init(void)
         rust_ui_show_error("Fatal error!", "WAS initialization failed.");
     }
 
-    if (!config_valid) {
+    if (!rust_config_is_valid()) {
         // wait "indefinitely"
         vTaskDelay(portMAX_DELAY);
     }

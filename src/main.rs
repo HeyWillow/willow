@@ -37,6 +37,7 @@ fn main() {
             unsafe { esp_idf_sys::vTaskDelay(u32::MAX) }
         }
     }
+    config::load();
 
     if let Err(error) = audio::initialize_recorder_queue() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize recorder queue: {error}");

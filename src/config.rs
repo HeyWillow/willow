@@ -196,8 +196,7 @@ pub unsafe extern "C" fn rust_config_get_int(key: *const c_char) -> i64 {
 /// Rust owns the file contents from the filesystem read through schema
 /// deserialization. The two raw document prints intentionally preserve the
 /// existing firmware's boot-time logging behavior.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_config_load() -> bool {
+pub(crate) fn load() {
     let metadata = match fs::metadata(CONFIG_PATH) {
         Ok(metadata) => metadata,
         Err(error) if error.kind() == ErrorKind::NotFound => {
@@ -205,11 +204,11 @@ pub extern "C" fn rust_config_load() -> bool {
                 target: LOG_TARGET,
                 "{CONFIG_PATH} does not exist, will be requested from WAS"
             );
-            return false;
+            return;
         }
         Err(error) => {
             error!(target: LOG_TARGET, "failed to get file status for {CONFIG_PATH}: {error}");
-            return false;
+            return;
         }
     };
 
@@ -220,7 +219,7 @@ pub extern "C" fn rust_config_load() -> bool {
         Ok(json) => json,
         Err(error) => {
             error!(target: LOG_TARGET, "failed to read {CONFIG_PATH}: {error}");
-            return false;
+            return;
         }
     };
 
@@ -232,16 +231,24 @@ pub extern "C" fn rust_config_load() -> bool {
         Err(error) => {
             error!(target: LOG_TARGET, "failed to parse configuration: {error}");
             error!(target: LOG_TARGET, "failed to parse config file");
-            return false;
+            return;
         }
     };
 
     if CONFIG.set(config).is_err() {
         error!(target: LOG_TARGET, "configuration was already initialized");
-        return false;
+        return;
     }
 
     info!(target: LOG_TARGET, "parsed config file:\n{json}");
+}
 
-    true
+pub(crate) fn is_valid() -> bool {
+    CONFIG.get().is_some()
+}
+
+/// Reports configuration validity to callers not yet migrated from C.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_config_is_valid() -> bool {
+    is_valid()
 }
