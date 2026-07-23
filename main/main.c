@@ -12,7 +12,6 @@
 #include "network.h"
 #include "rust.h"
 #include "shared.h"
-#include "system.h"
 #include "tasks.h"
 #include "was.h"
 
@@ -35,7 +34,6 @@ void willow_init(void)
 {
     esp_err_t err;
 
-    init_system();
     err = rust_spiffs_mount();
     if (err != ESP_OK) {
         // Preserve the old wait for the filesystem to become mounted.
@@ -134,7 +132,8 @@ err_nvs:
 #endif
 
     const esp_app_desc_t *app_desc = esp_app_get_description();
-    ESP_LOGI(TAG, "Startup complete! Hardware: %s. Version: %s. Waiting for wake word.", str_hw_type(hw_type),
+    ESP_LOGI(TAG, "Startup complete! Hardware: %s. Version: %s. Waiting for wake word.",
+             rust_system_hardware_name(),
              app_desc->version);
 
     // if we reached this point, we can mark the current partition valid

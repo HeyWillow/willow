@@ -13,7 +13,6 @@
 #include "ota.h"
 #include "rust.h"
 #include "shared.h"
-#include "system.h"
 #include "was.h"
 
 #define WAS_RECONNECT_TIMEOUT_MS 10 * 1000
@@ -513,7 +512,7 @@ static void send_hello_goodbye(const char *type)
     if (cJSON_AddStringToObject(msg, "hostname", hostname) == NULL) {
         goto cleanup;
     }
-    if (cJSON_AddStringToObject(msg, "hw_type", str_hw_type(hw_type)) == NULL) {
+    if (cJSON_AddStringToObject(msg, "hw_type", rust_system_hardware_name()) == NULL) {
         goto cleanup;
     }
     if (!cJSON_AddItemToObjectCS(msg, "mac_addr", mac_arr)) {

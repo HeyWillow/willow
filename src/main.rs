@@ -27,6 +27,7 @@ fn main() {
     // non-returning main function so it remains available to every subsystem.
     let _system_event_loop =
         EspSystemEventLoop::take().expect("failed to initialize default event loop");
+    system::log_hardware();
 
     if let Err(error) = audio::initialize_recorder_queue() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize recorder queue: {error}");
