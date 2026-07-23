@@ -1,4 +1,5 @@
 #include "main/audio_bindings.h"
+#include "main/was_bindings.h"
 
 #include "audio_recorder.h"
 #include "esp_audio.h"

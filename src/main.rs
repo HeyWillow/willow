@@ -17,6 +17,7 @@ mod spiffs;
 mod state;
 mod system;
 mod ui;
+mod was;
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;
 use esp_idf_svc::hal::delay::FreeRtos;

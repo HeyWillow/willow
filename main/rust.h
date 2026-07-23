@@ -8,6 +8,7 @@
 #include "esp_netif.h"
 #include "driver/i2c_master.h"
 #include "freertos/queue.h"
+#include "freertos/semphr.h"
 
 QueueHandle_t rust_audio_recorder_queue_handle(void);
 bool rust_audio_is_recording(void);
@@ -35,6 +36,7 @@ const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
 bool rust_state_is_restarting(void);
 void rust_state_mark_restarting(void);
+SemaphoreHandle_t rust_was_notify_mutex(void);
 void rust_ui_hide_connecting(void);
 void rust_ui_notification_end(void);
 bool rust_ui_notification_cancelled(void);
