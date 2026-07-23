@@ -8,6 +8,8 @@ mod capture;
 mod codec_ffi;
 mod codecs;
 mod es7210;
+mod http_audio;
+mod http_playback;
 mod i2s;
 mod ogg_headers;
 mod pcm;
