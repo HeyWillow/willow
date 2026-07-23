@@ -7,6 +7,7 @@
 
 #include "driver/spi_master.h"
 #include "esp_eth.h"
+#include "esp_mac.h"
 
 #include "shared.h"
 
@@ -128,6 +129,8 @@ esp_err_t init_ethernet(void)
     esp_eth_mac_t *mac_spi[1];
     esp_eth_phy_t *phy_spi[1];
     esp_eth_handle_t eth_handle_spi[1] = {NULL};
+    uint8_t eth_mac[6];
+    ESP_ERROR_CHECK(esp_read_mac(eth_mac, ESP_MAC_ETH));
 
     // W5500
     spi_device_interface_config_t devcfg = {.command_bits = 16, // Actually it's the address phase in W5500 SPI frame
@@ -156,12 +159,9 @@ esp_err_t init_ethernet(void)
         esp_eth_config_t eth_config_spi = ETH_DEFAULT_CONFIG(mac_spi[i], phy_spi[i]);
         ESP_ERROR_CHECK(esp_eth_driver_install(&eth_config_spi, &eth_handle_spi[i]));
 
-        /* The SPI Ethernet module might not have a burned factory MAC address, we cat to set it manually.
-       02:00:00 is a Locally Administered OUI range so should not be used except when testing on a LAN under your
-       control.
-        */
-        ESP_ERROR_CHECK(
-            esp_eth_ioctl(eth_handle_spi[i], ETH_CMD_S_MAC_ADDR, (uint8_t[]){0x02, 0x00, 0x00, 0x12, 0x34, 0x56 + i}));
+        // The W5500 has no burned factory address. Use the Ethernet address
+        // derived from the ESP's base MAC instead.
+        ESP_ERROR_CHECK(esp_eth_ioctl(eth_handle_spi[i], ETH_CMD_S_MAC_ADDR, eth_mac));
 
         // attach Ethernet driver to TCP/IP stack
         ESP_ERROR_CHECK(esp_netif_attach(eth_netif_spi[i], esp_eth_new_netif_glue(eth_handle_spi[i])));
