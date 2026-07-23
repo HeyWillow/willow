@@ -20,6 +20,9 @@ mod response_config;
 mod spiffs_playback;
 mod spiffs_uri;
 mod stream_codec;
+mod wis_config;
+mod wis_encoder;
+mod wis_framing;
 
 use core::{ffi::c_void, ptr::NonNull};
 use std::{
