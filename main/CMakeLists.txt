@@ -34,6 +34,24 @@ endif()
 
 spiffs_create_partition_image(user ../spiffs/user FLASH_IN_PROJECT)
 
+# ESP-SR 1.9.5 packs models in filesystem traversal order. Repack the staged
+# models with sorted traversal so clean builds produce an identical image.
+idf_build_get_property(WILLOW_BUILD_DIR BUILD_DIR)
+idf_component_get_property(ESP_SR_DIR espressif__esp-sr COMPONENT_DIR)
+set(WILLOW_SR_PACKER "${CMAKE_CURRENT_LIST_DIR}/../scripts/pack_srmodels.py")
+add_custom_target(
+    willow_srmodels_bin ALL
+    COMMAND
+        "${PYTHON}" "${WILLOW_SR_PACKER}"
+        "${ESP_SR_DIR}/model/pack_model.py"
+        "${WILLOW_BUILD_DIR}/srmodels"
+    DEPENDS "${WILLOW_SR_PACKER}"
+    COMMENT "Repack ESP-SR models deterministically"
+    VERBATIM
+)
+add_dependencies(willow_srmodels_bin srmodels_bin)
+add_dependencies(flash willow_srmodels_bin)
+
 string(APPEND CMAKE_C_FLAGS " -Werror")
 
 # sdkconfig sanity checks
