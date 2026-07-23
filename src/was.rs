@@ -1,5 +1,7 @@
 //! Willow Application Server transport ownership.
 
+mod protocol;
+
 use core::{
     ffi::{c_char, c_void},
     sync::atomic::{AtomicPtr, Ordering},
@@ -20,9 +22,11 @@ use esp_idf_sys::{
     esp_websocket_event_id_t_WEBSOCKET_EVENT_ANY, esp_websocket_register_events, xQueueCreateMutex,
 };
 use log::{error, info, warn};
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::{state, ui};
+
+use self::protocol::Command;
 
 const LOG_TARGET: &str = "WILLOW/WAS";
 const USER_AGENT: &str = concat!("Willow/", env!("WILLOW_VERSION"));
@@ -117,11 +121,8 @@ pub(crate) fn send_endpoint(data: &str) -> Result<usize, EspError> {
         return Ok(0);
     };
 
-    let message = serde_json::to_string(&json!({
-        "cmd": "endpoint",
-        "data": data,
-    }))
-    .map_err(|_| EspError::from_infallible::<ESP_FAIL>())?;
+    let message = serde_json::to_string(&Command::Endpoint { data })
+        .map_err(|_| EspError::from_infallible::<ESP_FAIL>())?;
 
     send_text(&message).inspect_err(|_| {
         error!(target: LOG_TARGET, "failed to send message to WAS");
@@ -133,11 +134,12 @@ pub(crate) fn request_config() -> Result<(), EspError> {
         return Ok(());
     }
 
-    send_text(r#"{"cmd":"get_config"}"#)
-        .map(|_| ())
-        .inspect_err(|_| {
-            error!(target: LOG_TARGET, "failed to send WAS get_config message");
-        })
+    let message = serde_json::to_string(&Command::<()>::GetConfig)
+        .map_err(|_| EspError::from_infallible::<ESP_FAIL>())?;
+
+    send_text(&message).map(|_| ()).inspect_err(|_| {
+        error!(target: LOG_TARGET, "failed to send WAS get_config message");
+    })
 }
 
 pub(crate) fn initialize(url: &str) -> Result<(), EspError> {

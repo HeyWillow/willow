@@ -1580,6 +1580,7 @@ dependencies = [
  "esp-idf-sys",
  "log",
  "rusttype",
+ "serde",
  "serde_json",
  "willow-schema",
 ]
