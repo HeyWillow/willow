@@ -1,21 +1,105 @@
 #[cfg(esp_idf_willow_ethernet)]
 mod ethernet;
 pub(crate) mod ntp;
+#[cfg(not(esp_idf_willow_ethernet))]
 pub(crate) mod wifi;
 
-use core::ptr::NonNull;
+use core::{ptr, ptr::NonNull};
 use std::{
     borrow::Cow,
     ffi::{CStr, CString},
 };
 
 use esp_idf_sys::{
-    CONFIG_LWIP_LOCAL_HOSTNAME, EspError, esp_event_base_t, esp_mac_type_t, esp_netif_set_hostname,
-    esp_netif_t, esp_read_mac,
+    CONFIG_LWIP_LOCAL_HOSTNAME, ESP_ERR_INVALID_ARG, ESP_OK, EspError, esp_err_t, esp_event_base_t,
+    esp_mac_type_t, esp_netif_init, esp_netif_set_hostname, esp_netif_t, esp_read_mac,
 };
 use log::{error, info};
 
+#[cfg(not(esp_idf_willow_ethernet))]
+use crate::{nvs, ui};
+
+#[cfg(esp_idf_mbedtls_ssl_proto_tls1_3)]
+use crate::crypto;
+#[cfg(not(esp_idf_willow_ethernet))]
+use esp_idf_sys::vTaskDelay;
+
 const LOG_TARGET: &str = "WILLOW/NETWORK";
+#[cfg(not(esp_idf_willow_ethernet))]
+const NVS_LOG_TARGET: &str = "WILLOW/MAIN";
+
+fn check(result: esp_err_t) -> Result<(), EspError> {
+    EspError::from(result).map_or(Ok(()), Err)
+}
+
+#[cfg(not(esp_idf_willow_ethernet))]
+fn fatal_wifi_provisioning(error: nvs::ReadError) -> ! {
+    error!(target: NVS_LOG_TARGET, "failed to read Wi-Fi NVS configuration: {error}");
+    ui::show_error("Fatal error!", Some("Failed to read NVS partition."));
+
+    loop {
+        unsafe {
+            vTaskDelay(u32::MAX);
+        }
+    }
+}
+
+/// Initializes ESP-NETIF, the configured transport, and PSA Crypto.
+///
+/// Wi-Fi driver failures remain advisory, matching the C startup path. A
+/// missing or invalid Wi-Fi provisioning record displays the fatal NVS screen
+/// and waits indefinitely. ESP-NETIF and Ethernet failures remain fatal to the
+/// caller.
+pub(crate) fn initialize() -> Result<Option<NonNull<esp_netif_t>>, EspError> {
+    check(unsafe { esp_netif_init() })?;
+
+    #[cfg(esp_idf_willow_ethernet)]
+    let network_interface = Some(ethernet::initialize()?);
+
+    #[cfg(not(esp_idf_willow_ethernet))]
+    let network_interface;
+    #[cfg(not(esp_idf_willow_ethernet))]
+    {
+        let wifi = match nvs::read_wifi() {
+            Ok(wifi) => wifi,
+            Err(error) => fatal_wifi_provisioning(error),
+        };
+        network_interface = wifi::initialize(wifi.psk.as_str(), wifi.ssid.as_str()).ok();
+    }
+
+    #[cfg(esp_idf_mbedtls_ssl_proto_tls1_3)]
+    crypto::initialize();
+
+    Ok(network_interface)
+}
+
+/// Compatibility entry point for C-owned WAS initialization.
+///
+/// # Safety
+///
+/// `network_interface` must point to writable storage for an ESP-NETIF
+/// interface pointer.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_network_init(network_interface: *mut *mut esp_netif_t) -> esp_err_t {
+    let Some(network_interface) = NonNull::new(network_interface) else {
+        error!(target: LOG_TARGET, "network interface output is null");
+        return ESP_ERR_INVALID_ARG;
+    };
+    unsafe {
+        network_interface.as_ptr().write(ptr::null_mut());
+    }
+
+    match initialize() {
+        Ok(Some(interface)) => {
+            unsafe {
+                network_interface.as_ptr().write(interface.as_ptr());
+            }
+            ESP_OK
+        }
+        Ok(None) => ESP_OK,
+        Err(error) => error.code(),
+    }
+}
 
 fn log_unhandled(event_base: esp_event_base_t, event_id: i32) {
     let event_base = if event_base.is_null() {

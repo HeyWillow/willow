@@ -24,18 +24,13 @@ intptr_t rust_config_get_char_len(const char *key);
 int64_t rust_config_get_int(const char *key);
 bool rust_config_is_valid(void);
 bool rust_config_write(const char *data);
-void rust_crypto_init(void);
-esp_err_t rust_ethernet_init(esp_netif_t **network_interface);
 void rust_get_mac_address(void);
+esp_err_t rust_network_init(esp_netif_t **network_interface);
 bool rust_nvs_apply(const char *data);
 bool rust_nvs_read_was_url(char *output, size_t output_len);
-bool rust_nvs_read_wifi(char *psk, size_t psk_len, char *ssid,
-                        size_t ssid_len);
 const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
-bool rust_state_is_nvs_ok(void);
 bool rust_state_is_restarting(void);
-void rust_state_mark_nvs_ok(void);
 void rust_state_mark_restarting(void);
 esp_err_t rust_ui_touch_init(int32_t stop_event);
 void rust_ui_hide_connecting(void);
@@ -50,5 +45,3 @@ void rust_ui_show_notification(const char *message, void *player);
 void rust_ui_show_ready(const char *message);
 void rust_ui_show_recognition(const char *heading, const char *body);
 void rust_ui_show_thinking(bool multiwake_won);
-esp_err_t rust_wifi_init(const char *psk, const char *ssid,
-                         esp_netif_t **network_interface);

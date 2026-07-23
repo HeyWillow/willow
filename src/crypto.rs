@@ -16,9 +16,3 @@ pub(crate) fn initialize() {
         );
     }
 }
-
-/// Compatibility entry point for C-owned startup ordering.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_crypto_init() {
-    initialize();
-}

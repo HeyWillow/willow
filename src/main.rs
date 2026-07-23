@@ -23,7 +23,6 @@ fn main() {
 
     log::info!(target: "WILLOW/RUST", "entered Rust main()");
 
-    state::mark_init();
     logging::apply_policy(log_filter).expect("failed to configure logging");
     log::info!(target: "WILLOW/MAIN", "Starting up! Please wait...");
 

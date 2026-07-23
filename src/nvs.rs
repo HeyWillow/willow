@@ -20,7 +20,10 @@ use esp_idf_sys::{
     ESP_ERR_NVS_NO_FREE_PAGES, EspError, esp_err_t, nvs_commit, nvs_flash_erase, nvs_set_str,
 };
 use log::error;
-use willow_schema::nvs::v1::{Config, Was, Wifi, WifiPsk, WifiPskError, WifiSsid, WifiSsidError};
+use willow_schema::nvs::v1::{Config, Was};
+
+#[cfg(not(esp_idf_willow_ethernet))]
+use willow_schema::nvs::v1::{Wifi, WifiPsk, WifiPskError, WifiSsid, WifiSsidError};
 
 const APPLY_LOG_TARGET: &str = "WILLOW/WAS";
 const READ_LOG_TARGET: &str = "WILLOW/MAIN";
@@ -89,7 +92,9 @@ pub(crate) enum ReadError {
     InvalidOutput(&'static str),
     Missing(&'static str),
     Nvs(EspError),
+    #[cfg(not(esp_idf_willow_ethernet))]
     WifiPsk(WifiPskError),
+    #[cfg(not(esp_idf_willow_ethernet))]
     WifiSsid(WifiSsidError),
 }
 
@@ -101,7 +106,9 @@ impl fmt::Display for ReadError {
             }
             Self::Missing(field) => write!(formatter, "missing NVS value {field}"),
             Self::Nvs(error) => write!(formatter, "NVS operation failed: {error}"),
+            #[cfg(not(esp_idf_willow_ethernet))]
             Self::WifiPsk(error) => write!(formatter, "invalid WIFI/PSK: {error}"),
+            #[cfg(not(esp_idf_willow_ethernet))]
             Self::WifiSsid(error) => write!(formatter, "invalid WIFI/SSID: {error}"),
         }
     }
@@ -163,6 +170,7 @@ pub(crate) fn read_was() -> Result<Was, ReadError> {
     Ok(Was { url })
 }
 
+#[cfg(not(esp_idf_willow_ethernet))]
 pub(crate) fn read_wifi() -> Result<Wifi, ReadError> {
     let namespace = EspNvs::new(default_partition(), "WIFI", false)?;
     let psk = read_string::<64>(&namespace, "WIFI/PSK", "PSK")?;
@@ -237,36 +245,6 @@ pub unsafe extern "C" fn rust_nvs_read_was_url(output: *mut c_char, output_len: 
         read_was().and_then(|was| unsafe { copy_string("WAS/URL", &was.url, output, output_len) });
     if let Err(error) = result {
         error!(target: READ_LOG_TARGET, "failed to read WAS NVS configuration: {error}");
-        return false;
-    }
-
-    true
-}
-
-/// Reads provisioned Wi-Fi credentials into the existing C compatibility
-/// buffers.
-///
-/// Rust owns the NVS partition and validates both values with the shared
-/// schema types. The copies preserve the existing C startup boundary while
-/// leaving Wi-Fi initialization and its error behavior unchanged.
-///
-/// # Safety
-///
-/// `psk` and `ssid` must point to writable storage for `psk_len` and
-/// `ssid_len` bytes respectively.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_nvs_read_wifi(
-    psk: *mut c_char,
-    psk_len: usize,
-    ssid: *mut c_char,
-    ssid_len: usize,
-) -> bool {
-    let result = read_wifi().and_then(|wifi| unsafe {
-        copy_string("WIFI/PSK", wifi.psk.as_str(), psk, psk_len)?;
-        copy_string("WIFI/SSID", wifi.ssid.as_str(), ssid, ssid_len)
-    });
-    if let Err(error) = result {
-        error!(target: READ_LOG_TARGET, "failed to read Wi-Fi NVS configuration: {error}");
         return false;
     }
 

@@ -1,6 +1,5 @@
 #include "esp_err.h"
 #include "esp_log.h"
-#include "esp_netif.h"
 #include "esp_ota_ops.h"
 #include "esp_timer.h"
 #include "sdkconfig.h"
@@ -24,27 +23,14 @@ void willow_init(void)
 {
     esp_err_t err;
 
-    ESP_ERROR_CHECK(esp_netif_init());
-
-#ifdef CONFIG_WILLOW_ETHERNET
-    ESP_ERROR_CHECK(rust_ethernet_init(&hdl_netif));
-#else
-    char psk[64];
-    char ssid[33];
-    if (!rust_nvs_read_wifi(psk, sizeof(psk), ssid, sizeof(ssid))) {
-        goto err_nvs;
-    }
-    (void)rust_wifi_init(psk, ssid, &hdl_netif);
-#endif
-
-#ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
-    rust_crypto_init();
-#endif
+    ESP_ERROR_CHECK(rust_network_init(&hdl_netif));
 
     if (!rust_nvs_read_was_url(was_url, sizeof(was_url))) {
-        goto err_nvs;
+        rust_ui_show_error("Fatal error!", "Failed to read NVS partition.");
+        for (;;) {
+            vTaskDelay(portMAX_DELAY);
+        }
     }
-    rust_state_mark_nvs_ok();
     err = init_was();
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to initialize Willow Application Server connection");
@@ -52,14 +38,6 @@ void willow_init(void)
     }
 
     if (!rust_config_is_valid()) {
-        // wait "indefinitely"
-        vTaskDelay(portMAX_DELAY);
-    }
-
-// we jump over WAS initialization was without Wi-Fi this will never work
-err_nvs:
-    if (!rust_state_is_nvs_ok()) {
-        rust_ui_show_error("Fatal error!", "Failed to read NVS partition.");
         // wait "indefinitely"
         vTaskDelay(portMAX_DELAY);
     }

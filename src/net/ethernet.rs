@@ -9,12 +9,12 @@ use core::{ffi::c_void, net::Ipv4Addr, ptr, ptr::NonNull};
 
 use esp_idf_sys::{
     _g_esp_netif_inherent_eth_config, _g_esp_netif_netstack_default_eth, CONFIG_FREERTOS_HZ,
-    ESP_ERR_INVALID_ARG, ESP_ERR_NO_MEM, ESP_EVENT_ANY_ID, ESP_OK, ETH_EVENT, EspError, IP_EVENT,
-    esp_err_t, esp_eth_config_t, esp_eth_driver_install, esp_eth_handle_t,
-    esp_eth_io_cmd_t_ETH_CMD_G_MAC_ADDR, esp_eth_io_cmd_t_ETH_CMD_S_MAC_ADDR, esp_eth_ioctl,
-    esp_eth_mac_new_w5500, esp_eth_new_netif_glue, esp_eth_phy_new_w5500, esp_eth_start,
-    esp_event_base_t, esp_event_handler_register, esp_mac_type_t_ESP_MAC_ETH, esp_netif_attach,
-    esp_netif_config_t, esp_netif_is_netif_up, esp_netif_new, esp_netif_t, esp_read_mac,
+    ESP_ERR_NO_MEM, ESP_EVENT_ANY_ID, ETH_EVENT, EspError, IP_EVENT, esp_err_t, esp_eth_config_t,
+    esp_eth_driver_install, esp_eth_handle_t, esp_eth_io_cmd_t_ETH_CMD_G_MAC_ADDR,
+    esp_eth_io_cmd_t_ETH_CMD_S_MAC_ADDR, esp_eth_ioctl, esp_eth_mac_new_w5500,
+    esp_eth_new_netif_glue, esp_eth_phy_new_w5500, esp_eth_start, esp_event_base_t,
+    esp_event_handler_register, esp_mac_type_t_ESP_MAC_ETH, esp_netif_attach, esp_netif_config_t,
+    esp_netif_is_netif_up, esp_netif_new, esp_netif_t, esp_read_mac,
     eth_event_t_ETHERNET_EVENT_CONNECTED as ETHERNET_EVENT_CONNECTED,
     eth_event_t_ETHERNET_EVENT_DISCONNECTED as ETHERNET_EVENT_DISCONNECTED,
     eth_event_t_ETHERNET_EVENT_START as ETHERNET_EVENT_START,
@@ -335,28 +335,4 @@ pub(crate) fn initialize() -> Result<NonNull<esp_netif_t>, EspError> {
     let _ = ntp::start();
 
     Ok(network_interface)
-}
-
-/// Compatibility entry point for the remaining C startup path.
-///
-/// # Safety
-///
-/// `network_interface` must point to writable storage for an ESP-NETIF
-/// interface pointer.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ethernet_init(network_interface: *mut *mut esp_netif_t) -> esp_err_t {
-    let Some(network_interface) = NonNull::new(network_interface) else {
-        error!(target: LOG_TARGET, "Ethernet network interface output is null");
-        return ESP_ERR_INVALID_ARG;
-    };
-
-    match initialize() {
-        Ok(interface) => {
-            unsafe {
-                network_interface.as_ptr().write(interface.as_ptr());
-            }
-            ESP_OK
-        }
-        Err(error) => error.code(),
-    }
 }

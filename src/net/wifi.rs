@@ -1,33 +1,32 @@
 //! Wi-Fi initialization and event handling through ESP-IDF.
 //!
-//! C supplies the provisioned credentials and retains the resulting network
-//! interface for the WAS code that still needs its hostname. Driver setup,
-//! event callbacks, hostname setup, SNTP, and connection synchronization stay
-//! entirely in Rust.
+//! Rust reads the provisioned credentials and returns the resulting network
+//! interface to the C-owned WAS code, which still needs its hostname. Driver
+//! setup, event callbacks, hostname setup, SNTP, and connection
+//! synchronization stay entirely in Rust.
 
 use core::{
-    ffi::{c_char, c_void},
+    ffi::c_void,
     net::Ipv4Addr,
     ptr::{self, NonNull},
 };
-use std::{borrow::Cow, ffi::CStr};
+use std::borrow::Cow;
 
 use esp_idf_sys::{
     CONFIG_ESP_WIFI_DYNAMIC_RX_BUFFER_NUM, CONFIG_ESP_WIFI_DYNAMIC_RX_MGMT_BUF,
     CONFIG_ESP_WIFI_ESPNOW_MAX_ENCRYPT_NUM, CONFIG_ESP_WIFI_STATIC_RX_BUFFER_NUM,
-    CONFIG_ESP_WIFI_TX_BUFFER_TYPE, ESP_ERR_INVALID_ARG, ESP_ERR_NO_MEM, ESP_EVENT_ANY_ID,
-    ESP_FAIL, ESP_OK, EspError, EventGroupDef_t, IP_EVENT, WIFI_AMPDU_RX_ENABLED,
-    WIFI_AMPDU_TX_ENABLED, WIFI_AMSDU_TX_ENABLED, WIFI_CACHE_TX_BUFFER_NUM, WIFI_CSI_ENABLED,
-    WIFI_DEFAULT_RX_BA_WIN, WIFI_DUMP_HESIGB_ENABLED, WIFI_DYNAMIC_TX_BUFFER_NUM, WIFI_EVENT,
-    WIFI_FEATURE_CAPS, WIFI_INIT_CONFIG_MAGIC, WIFI_MGMT_SBUF_NUM, WIFI_NANO_FORMAT_ENABLED,
-    WIFI_NVS_ENABLED, WIFI_RX_MGMT_BUF_NUM_DEF, WIFI_SOFTAP_BEACON_MAX_LEN,
-    WIFI_STA_DISCONNECTED_PM_ENABLED, WIFI_STATIC_TX_BUFFER_NUM, WIFI_TASK_CORE_ID,
-    WIFI_TX_HETB_QUEUE_NUM, esp_err_t, esp_event_base_t, esp_event_handler_register,
-    esp_mac_type_t_ESP_MAC_WIFI_STA, esp_netif_create_default_wifi_sta, esp_netif_t,
-    esp_wifi_connect, esp_wifi_get_mac, esp_wifi_init, esp_wifi_set_config, esp_wifi_set_ps,
-    esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_osi_funcs, ip_event_got_ip_t,
-    ip_event_t_IP_EVENT_STA_GOT_IP, wifi_auth_mode_t_WIFI_AUTH_WPA2_PSK, wifi_config_t,
-    wifi_event_sta_connected_t, wifi_event_sta_disconnected_t,
+    CONFIG_ESP_WIFI_TX_BUFFER_TYPE, ESP_ERR_NO_MEM, ESP_EVENT_ANY_ID, ESP_FAIL, EspError,
+    EventGroupDef_t, IP_EVENT, WIFI_AMPDU_RX_ENABLED, WIFI_AMPDU_TX_ENABLED, WIFI_AMSDU_TX_ENABLED,
+    WIFI_CACHE_TX_BUFFER_NUM, WIFI_CSI_ENABLED, WIFI_DEFAULT_RX_BA_WIN, WIFI_DUMP_HESIGB_ENABLED,
+    WIFI_DYNAMIC_TX_BUFFER_NUM, WIFI_EVENT, WIFI_FEATURE_CAPS, WIFI_INIT_CONFIG_MAGIC,
+    WIFI_MGMT_SBUF_NUM, WIFI_NANO_FORMAT_ENABLED, WIFI_NVS_ENABLED, WIFI_RX_MGMT_BUF_NUM_DEF,
+    WIFI_SOFTAP_BEACON_MAX_LEN, WIFI_STA_DISCONNECTED_PM_ENABLED, WIFI_STATIC_TX_BUFFER_NUM,
+    WIFI_TASK_CORE_ID, WIFI_TX_HETB_QUEUE_NUM, esp_err_t, esp_event_base_t,
+    esp_event_handler_register, esp_mac_type_t_ESP_MAC_WIFI_STA, esp_netif_create_default_wifi_sta,
+    esp_netif_t, esp_wifi_connect, esp_wifi_get_mac, esp_wifi_init, esp_wifi_set_config,
+    esp_wifi_set_ps, esp_wifi_start, g_wifi_default_wpa_crypto_funcs, g_wifi_osi_funcs,
+    ip_event_got_ip_t, ip_event_t_IP_EVENT_STA_GOT_IP, wifi_auth_mode_t_WIFI_AUTH_WPA2_PSK,
+    wifi_config_t, wifi_event_sta_connected_t, wifi_event_sta_disconnected_t,
     wifi_event_t_WIFI_EVENT_STA_CONNECTED as WIFI_EVENT_STA_CONNECTED,
     wifi_event_t_WIFI_EVENT_STA_DISCONNECTED as WIFI_EVENT_STA_DISCONNECTED,
     wifi_event_t_WIFI_EVENT_STA_START as WIFI_EVENT_STA_START, wifi_init_config_t,
@@ -387,49 +386,4 @@ pub(crate) fn initialize(psk: &str, ssid: &str) -> Result<NonNull<esp_netif_t>, 
     )?;
 
     Ok(network_interface)
-}
-
-/// Compatibility entry point for the remaining C startup path.
-///
-/// # Safety
-///
-/// `psk` and `ssid` must point to live NUL-terminated strings for the duration
-/// of this call. `network_interface` must point to writable storage for an
-/// [`esp_netif_t`] pointer.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_wifi_init(
-    psk: *const c_char,
-    ssid: *const c_char,
-    network_interface: *mut *mut esp_netif_t,
-) -> esp_err_t {
-    let Some(network_interface) = NonNull::new(network_interface) else {
-        error!(target: LOG_TARGET, "network interface output is null");
-        return ESP_ERR_INVALID_ARG;
-    };
-    unsafe {
-        network_interface.as_ptr().write(ptr::null_mut());
-    }
-
-    if psk.is_null() || ssid.is_null() {
-        error!(target: LOG_TARGET, "Wi-Fi credentials are null");
-        return ESP_ERR_INVALID_ARG;
-    }
-    let Ok(psk) = (unsafe { CStr::from_ptr(psk) }).to_str() else {
-        error!(target: LOG_TARGET, "Wi-Fi passphrase is not valid UTF-8");
-        return ESP_ERR_INVALID_ARG;
-    };
-    let Ok(ssid) = (unsafe { CStr::from_ptr(ssid) }).to_str() else {
-        error!(target: LOG_TARGET, "Wi-Fi SSID is not valid UTF-8");
-        return ESP_ERR_INVALID_ARG;
-    };
-
-    match initialize(psk, ssid) {
-        Ok(interface) => {
-            unsafe {
-                network_interface.as_ptr().write(interface.as_ptr());
-            }
-            ESP_OK
-        }
-        Err(error) => error.code(),
-    }
 }
