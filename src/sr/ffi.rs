@@ -1,6 +1,7 @@
 use core::ffi::{CStr, c_void};
 use core::marker::PhantomData;
 use core::ptr::NonNull;
+use core::slice;
 use core::sync::atomic::{AtomicBool, Ordering};
 use std::ffi::CString;
 use std::rc::Rc;
@@ -9,7 +10,10 @@ use esp_idf_sys::esp_sr as raw;
 use sha2::{Digest, Sha256};
 
 use super::fixture::{PACK_HEADER_LENGTH, PackedFile, validate_pack};
-use super::{FrameSpec, InputFormat, Sha256Digest, SrError, WakeModel};
+use super::{
+    AfeRuntimeError, FeedStatus, FetchedFrame, FrameSpec, InputFormat, Sha256Digest, SrError,
+    VadState, WakeDetection, WakeModel, WakeState,
+};
 
 const EXPECTED_PARTITION_ADDRESS: u32 = 0x0063_0000;
 const EXPECTED_PARTITION_SIZE: u32 = 0x0060_0000;
@@ -74,6 +78,32 @@ impl Frontend {
 
     pub(super) const fn model_index(&self) -> usize {
         self.model_index
+    }
+
+    pub(super) fn feed(&mut self, samples: &[i16]) -> Result<FeedStatus, SrError> {
+        let expected = self
+            .frame_spec
+            .feed_samples_per_channel
+            .checked_mul(self.frame_spec.input_channels)
+            .ok_or(SrError::InternalInvariant("feed frame length overflows"))?;
+        if samples.len() != expected {
+            return Err(AfeRuntimeError::InvalidFeedLength {
+                expected,
+                actual: samples.len(),
+            }
+            .into());
+        }
+        self.afe
+            .as_mut()
+            .ok_or(SrError::InternalInvariant("AFE owner is absent"))?
+            .feed(samples)
+    }
+
+    pub(super) fn fetch(&mut self) -> Result<FetchedFrame<'_>, SrError> {
+        self.afe
+            .as_mut()
+            .ok_or(SrError::InternalInvariant("AFE owner is absent"))?
+            .fetch(self.frame_spec)
     }
 }
 
@@ -479,6 +509,105 @@ impl AfeLease {
             fetch_samples,
         })
     }
+
+    fn feed(&mut self, samples: &[i16]) -> Result<FeedStatus, SrError> {
+        let feed = self
+            .interface
+            .raw()
+            .feed
+            .ok_or(SrError::MissingAfeFunction("feed"))?;
+        // SAFETY: `self.data` is live and uniquely borrowed through `&mut self`;
+        // the caller validated the exact runtime-sized interleaved input slice.
+        // ESP-SR does not retain or take ownership of the slice.
+        let runtime_return = unsafe { feed(self.data.as_ptr(), samples.as_ptr()) };
+        if runtime_return < 0 {
+            return Err(AfeRuntimeError::FeedFailed {
+                code: runtime_return,
+            }
+            .into());
+        }
+        Ok(FeedStatus { runtime_return })
+    }
+
+    fn fetch(&mut self, frame_spec: FrameSpec) -> Result<FetchedFrame<'_>, SrError> {
+        let fetch = self
+            .interface
+            .raw()
+            .fetch
+            .ok_or(SrError::MissingAfeFunction("fetch"))?;
+        // SAFETY: `self.data` is live and uniquely borrowed. The returned
+        // result and audio storage remain AFE-owned until the next fetch or
+        // destruction, both excluded by the returned frame's borrow.
+        let result = unsafe { fetch(self.data.as_ptr()) };
+        let result = NonNull::new(result).ok_or(AfeRuntimeError::NullFetchResult)?;
+        // SAFETY: ESP-SR returned a non-null result for this live AFE. No
+        // reference to the result structure itself escapes this function.
+        let result = unsafe { result.as_ref() };
+
+        if result.ret_value < 0 {
+            return Err(AfeRuntimeError::FetchFailed {
+                code: result.ret_value,
+            }
+            .into());
+        }
+        let actual_bytes = usize::try_from(result.data_size)
+            .map_err(|_| AfeRuntimeError::InvalidFetchData("negative data_size"))?;
+        let expected_bytes = frame_spec
+            .fetch_samples
+            .checked_mul(core::mem::size_of::<i16>())
+            .ok_or(SrError::InternalInvariant("fetch byte length overflows"))?;
+        if actual_bytes != expected_bytes {
+            return Err(AfeRuntimeError::UnexpectedFetchSize {
+                expected_bytes,
+                actual_bytes,
+            }
+            .into());
+        }
+        if result.data.is_null() {
+            return Err(AfeRuntimeError::InvalidFetchData("audio data pointer is null").into());
+        }
+
+        let vad_state = match result.vad_state {
+            raw::afe_vad_state_t_AFE_VAD_SILENCE => VadState::Silence,
+            raw::afe_vad_state_t_AFE_VAD_SPEECH => VadState::Speech,
+            state => return Err(AfeRuntimeError::InvalidVadState(state).into()),
+        };
+        let wake_state = match result.wakeup_state {
+            raw::wakenet_state_t_WAKENET_NO_DETECT => WakeState::None,
+            raw::wakenet_state_t_WAKENET_CHANNEL_VERIFIED => WakeState::ChannelVerified {
+                trigger_output_channel_id: result.trigger_channel_id,
+            },
+            raw::wakenet_state_t_WAKENET_DETECTED => {
+                let wake_word_index_one_based =
+                    positive_index(result.wake_word_index, "wake word index is not positive")?;
+                let wakenet_model_index_one_based = positive_index(
+                    result.wakenet_model_index,
+                    "WakeNet model index is not positive",
+                )?;
+                let wake_word_samples = usize::try_from(result.wake_word_length).map_err(|_| {
+                    AfeRuntimeError::InvalidWakeMetadata("wake word length is negative")
+                })?;
+                WakeState::Detected(WakeDetection {
+                    wake_word_index_one_based,
+                    wakenet_model_index_one_based,
+                    wake_word_samples,
+                })
+            }
+            state => return Err(AfeRuntimeError::InvalidWakeState(state).into()),
+        };
+
+        // SAFETY: the non-null pointer describes exactly the byte length checked
+        // above. ESP-SR owns it until the next mutable AFE operation, and the
+        // returned lifetime is tied to this exclusive borrow of `self`.
+        let samples = unsafe { slice::from_raw_parts(result.data, frame_spec.fetch_samples) };
+
+        Ok(FetchedFrame {
+            samples,
+            data_volume_db: result.data_volume,
+            vad_state,
+            wake_state,
+        })
+    }
 }
 
 impl Drop for AfeLease {
@@ -556,4 +685,11 @@ fn call_dimension(name: &'static str, value: i32) -> Result<usize, SrError> {
         return Err(SrError::InvalidAfeDimension(name));
     }
     Ok(value)
+}
+
+fn positive_index(value: i32, reason: &'static str) -> Result<usize, SrError> {
+    if value <= 0 {
+        return Err(AfeRuntimeError::InvalidWakeMetadata(reason).into());
+    }
+    usize::try_from(value).map_err(|_| AfeRuntimeError::InvalidWakeMetadata(reason).into())
 }

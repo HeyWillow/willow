@@ -115,6 +115,104 @@ struct FrameSpec {
     fetch_samples: usize,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct FeedStatus {
+    runtime_return: i32,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum VadState {
+    Silence,
+    Speech,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+struct WakeDetection {
+    wake_word_index_one_based: usize,
+    wakenet_model_index_one_based: usize,
+    wake_word_samples: usize,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WakeState {
+    None,
+    Detected(WakeDetection),
+    ChannelVerified { trigger_output_channel_id: i32 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct FetchedFrame<'a> {
+    samples: &'a [i16],
+    data_volume_db: f32,
+    vad_state: VadState,
+    wake_state: WakeState,
+}
+
+#[derive(Debug)]
+enum AfeRuntimeError {
+    InvalidFeedLength {
+        expected: usize,
+        actual: usize,
+    },
+    FeedFailed {
+        code: i32,
+    },
+    NullFetchResult,
+    FetchFailed {
+        code: i32,
+    },
+    InvalidFetchData(&'static str),
+    UnexpectedFetchSize {
+        expected_bytes: usize,
+        actual_bytes: usize,
+    },
+    InvalidWakeState(i32),
+    InvalidVadState(u32),
+    InvalidWakeMetadata(&'static str),
+}
+
+impl fmt::Display for AfeRuntimeError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::InvalidFeedLength { expected, actual } => write!(
+                formatter,
+                "ESP-SR feed requires exactly {expected} interleaved samples, got {actual}"
+            ),
+            Self::FeedFailed { code } => {
+                write!(formatter, "ESP-SR feed failed with code {code}")
+            }
+            Self::NullFetchResult => write!(formatter, "ESP-SR fetch returned a null result"),
+            Self::FetchFailed { code } => {
+                write!(formatter, "ESP-SR fetch failed with code {code}")
+            }
+            Self::InvalidFetchData(reason) => write!(
+                formatter,
+                "ESP-SR fetch returned invalid audio metadata: {reason}"
+            ),
+            Self::UnexpectedFetchSize {
+                expected_bytes,
+                actual_bytes,
+            } => write!(
+                formatter,
+                "ESP-SR fetch returned {actual_bytes} audio bytes; expected {expected_bytes}"
+            ),
+            Self::InvalidWakeState(state) => {
+                write!(
+                    formatter,
+                    "ESP-SR fetch returned invalid wake state {state}"
+                )
+            }
+            Self::InvalidVadState(state) => {
+                write!(formatter, "ESP-SR fetch returned invalid VAD state {state}")
+            }
+            Self::InvalidWakeMetadata(reason) => write!(
+                formatter,
+                "ESP-SR fetch returned invalid wake metadata: {reason}"
+            ),
+        }
+    }
+}
+
 struct SpeechFrontend {
     inner: ffi::Frontend,
 }
@@ -130,6 +228,14 @@ impl SpeechFrontend {
 
     const fn model_index(&self) -> usize {
         self.inner.model_index()
+    }
+
+    fn feed(&mut self, samples: &[i16]) -> Result<FeedStatus, SrError> {
+        self.inner.feed(samples)
+    }
+
+    fn fetch(&mut self) -> Result<FetchedFrame<'_>, SrError> {
+        self.inner.fetch()
     }
 }
 
@@ -172,7 +278,14 @@ enum SrError {
         input_channels: usize,
         microphone_channels: usize,
     },
+    AfeRuntime(AfeRuntimeError),
     InternalInvariant(&'static str),
+}
+
+impl From<AfeRuntimeError> for SrError {
+    fn from(error: AfeRuntimeError) -> Self {
+        Self::AfeRuntime(error)
+    }
 }
 
 impl fmt::Display for SrError {
@@ -249,6 +362,7 @@ impl fmt::Display for SrError {
                 formatter,
                 "ESP-SR returned unexpected dimensions: rate={sample_rate}, inputs={input_channels}, microphones={microphone_channels}"
             ),
+            Self::AfeRuntime(error) => error.fmt(formatter),
             Self::InternalInvariant(reason) => {
                 write!(formatter, "internal wrapper invariant failed: {reason}")
             }
