@@ -7,15 +7,15 @@ use core::ptr;
 use std::sync::OnceLock;
 
 use esp_idf_sys::{
-    ESP_ERR_INVALID_STATE, ESP_OK, EspError, esp_err_t, esp_lcd_new_panel_io_spi,
-    esp_lcd_new_panel_st7789, esp_lcd_panel_del, esp_lcd_panel_dev_config_t,
-    esp_lcd_panel_disp_on_off, esp_lcd_panel_handle_t, esp_lcd_panel_init,
-    esp_lcd_panel_invert_color, esp_lcd_panel_io_del, esp_lcd_panel_io_handle_t,
-    esp_lcd_panel_io_spi_config_t, esp_lcd_panel_mirror, esp_lcd_panel_reset,
-    esp_lcd_panel_set_gap, esp_lcd_panel_swap_xy, esp_lcd_spi_bus_handle_t, gpio_config,
-    gpio_config_t, gpio_mode_t_GPIO_MODE_OUTPUT, gpio_num_t_GPIO_NUM_4, gpio_num_t_GPIO_NUM_5,
-    gpio_num_t_GPIO_NUM_6, gpio_num_t_GPIO_NUM_7, gpio_num_t_GPIO_NUM_45, gpio_num_t_GPIO_NUM_47,
-    gpio_num_t_GPIO_NUM_48, lcd_rgb_element_order_t_LCD_RGB_ELEMENT_ORDER_BGR,
+    ESP_ERR_INVALID_STATE, EspError, esp_err_t, esp_lcd_new_panel_io_spi, esp_lcd_new_panel_st7789,
+    esp_lcd_panel_del, esp_lcd_panel_dev_config_t, esp_lcd_panel_disp_on_off,
+    esp_lcd_panel_handle_t, esp_lcd_panel_init, esp_lcd_panel_invert_color, esp_lcd_panel_io_del,
+    esp_lcd_panel_io_handle_t, esp_lcd_panel_io_spi_config_t, esp_lcd_panel_mirror,
+    esp_lcd_panel_reset, esp_lcd_panel_set_gap, esp_lcd_panel_swap_xy, esp_lcd_spi_bus_handle_t,
+    gpio_config, gpio_config_t, gpio_mode_t_GPIO_MODE_OUTPUT, gpio_num_t_GPIO_NUM_4,
+    gpio_num_t_GPIO_NUM_5, gpio_num_t_GPIO_NUM_6, gpio_num_t_GPIO_NUM_7, gpio_num_t_GPIO_NUM_45,
+    gpio_num_t_GPIO_NUM_47, gpio_num_t_GPIO_NUM_48,
+    lcd_rgb_element_order_t_LCD_RGB_ELEMENT_ORDER_BGR,
     lcd_rgb_element_order_t_LCD_RGB_ELEMENT_ORDER_RGB, spi_bus_config_t, spi_bus_free,
     spi_bus_initialize, spi_common_dma_t_SPI_DMA_CH_AUTO, spi_host_device_t_SPI2_HOST,
 };
@@ -172,7 +172,8 @@ fn panel_configuration() -> esp_lcd_panel_dev_config_t {
     configuration
 }
 
-fn initialize() -> Result<(), EspError> {
+/// Initializes and retains the SPI bus, panel IO, ST7789 panel, and backlight.
+pub(crate) fn initialize() -> Result<(), EspError> {
     if DISPLAY.get().is_some() {
         return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
     }
@@ -248,13 +249,4 @@ fn initialize() -> Result<(), EspError> {
     DISPLAY
         .set(display)
         .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_STATE>())
-}
-
-/// Initializes and retains the SPI bus, panel IO, ST7789 panel, and backlight.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_display_init() -> esp_err_t {
-    match initialize() {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
-    }
 }
