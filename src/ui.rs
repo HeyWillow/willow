@@ -957,7 +957,8 @@ fn touch_worker(
     }
 }
 
-fn initialize() -> Result<(), EspError> {
+/// Initializes UI state and starts the renderer task.
+pub(crate) fn initialize() -> Result<(), EspError> {
     if UI.get().is_some() {
         return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
     }
@@ -1142,14 +1143,6 @@ unsafe fn text<'a>(pointer: *const c_char) -> Option<Cow<'a, str>> {
         None
     } else {
         Some(unsafe { CStr::from_ptr(pointer) }.to_string_lossy())
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_ui_init() -> esp_err_t {
-    match initialize() {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
     }
 }
 

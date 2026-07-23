@@ -41,6 +41,9 @@ fn main() {
     if let Err(error) = display::initialize() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize display: {error}");
     }
+    if let Err(error) = ui::initialize() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize UI: {error}");
+    }
 
     if let Err(error) = audio::initialize_recorder_queue() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize recorder queue: {error}");

@@ -34,8 +34,6 @@ void willow_init(void)
 {
     esp_err_t err;
 
-    ESP_ERROR_CHECK_WITHOUT_ABORT(rust_ui_init());
-
     ESP_ERROR_CHECK(esp_netif_init());
 
     err = nvs_flash_init();

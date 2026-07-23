@@ -29,7 +29,6 @@ bool rust_state_is_nvs_ok(void);
 bool rust_state_is_restarting(void);
 void rust_state_mark_nvs_ok(void);
 void rust_state_mark_restarting(void);
-esp_err_t rust_ui_init(void);
 esp_err_t rust_ui_touch_init(int32_t stop_event);
 void rust_ui_hide_connecting(void);
 void rust_ui_notification_end(void);
