@@ -1,4 +1,4 @@
-//! Firmware restart state shared with the remaining C implementation.
+//! Firmware restart state.
 
 use core::sync::atomic::{AtomicBool, Ordering};
 
@@ -9,7 +9,6 @@ pub(crate) fn is_restarting() -> bool {
 }
 
 /// Records that service shutdown for a restart has begun.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_state_mark_restarting() {
+pub(crate) fn mark_restarting() {
     RESTARTING.store(true, Ordering::SeqCst);
 }

@@ -11,15 +11,17 @@ use std::{
     sync::OnceLock,
 };
 
-use esp_idf_svc::hal::delay::TickType;
+use esp_idf_svc::hal::delay::{FreeRtos, TickType};
 use esp_idf_sys::{
-    ESP_ERR_INVALID_ARG, ESP_ERR_NO_MEM, ESP_FAIL, ESP_OK, EspError, SemaphoreHandle_t,
-    WAS_RECONNECT_TIMEOUT_MS, WILLOW_QUEUE_TYPE_MUTEX, esp_efuse_mac_get_default, esp_err_t,
-    esp_event_base_t, esp_log_level_set, esp_log_level_t_ESP_LOG_DEBUG, esp_websocket_client,
+    CONFIG_FREERTOS_NO_AFFINITY, ESP_ERR_INVALID_ARG, ESP_ERR_NO_MEM, ESP_FAIL, ESP_OK, EspError,
+    SemaphoreHandle_t, WAS_RECONNECT_TIMEOUT_MS, WILLOW_QUEUE_TYPE_MUTEX,
+    esp_efuse_mac_get_default, esp_err_t, esp_event_base_t, esp_log_level_set,
+    esp_log_level_t_ESP_LOG_DEBUG, esp_websocket_client, esp_websocket_client_close,
     esp_websocket_client_config_t, esp_websocket_client_destroy_on_exit,
     esp_websocket_client_handle_t, esp_websocket_client_init, esp_websocket_client_is_connected,
-    esp_websocket_client_send_text, esp_websocket_client_start,
-    esp_websocket_event_id_t_WEBSOCKET_EVENT_ANY, esp_websocket_register_events, xQueueCreateMutex,
+    esp_websocket_client_send_text, esp_websocket_client_start, esp_websocket_client_stop,
+    esp_websocket_event_id_t_WEBSOCKET_EVENT_ANY, esp_websocket_register_events, vTaskDelete,
+    xQueueCreateMutex, xTaskCreatePinnedToCore,
 };
 use log::{error, info, warn};
 use serde_json::Value;
@@ -29,6 +31,10 @@ use crate::{config, net, state, system, ui};
 use self::protocol::{Command, DeviceIdentity, Event};
 
 const LOG_TARGET: &str = "WILLOW/WAS";
+const DEINIT_DELAY_MS: u32 = 2_000;
+const DEINIT_TASK_PRIORITY: u32 = 5;
+const DEINIT_TASK_STACK_SIZE: u32 = 4_096;
+const STOP_TIMEOUT_MS: u64 = 5_000;
 const USER_AGENT: &str = concat!("Willow/", env!("WILLOW_VERSION"));
 
 static CLIENT: AtomicPtr<esp_websocket_client> = AtomicPtr::new(core::ptr::null_mut());
@@ -206,6 +212,52 @@ pub(crate) fn send_hello() -> Result<(), EspError> {
     send_connection_announcement(ConnectionAnnouncement::Hello)
 }
 
+fn stop() {
+    let client = client_handle();
+    info!(target: LOG_TARGET, "stopping WebSocket client");
+
+    if EspError::from(unsafe {
+        esp_websocket_client_close(client, TickType::new_millis(STOP_TIMEOUT_MS).0)
+    })
+    .is_some()
+    {
+        error!(target: LOG_TARGET, "failed to cleanly close WebSocket client");
+
+        if let Some(error) = EspError::from(unsafe { esp_websocket_client_stop(client) }) {
+            error!(target: LOG_TARGET, "failed to stop WebSocket client: {error}");
+        }
+    }
+}
+
+unsafe extern "C" fn deinit_task(_data: *mut c_void) {
+    stop();
+    unsafe {
+        vTaskDelete(core::ptr::null_mut());
+    }
+}
+
+pub(crate) fn deinitialize() {
+    state::mark_restarting();
+    let _ = send_goodbye();
+
+    // The client cannot be stopped from its event-handler task. Preserve the
+    // old unpinned FreeRTOS task, including its stack size and priority.
+    let _ = unsafe {
+        xTaskCreatePinnedToCore(
+            Some(deinit_task),
+            c"was_deinit_task".as_ptr(),
+            DEINIT_TASK_STACK_SIZE,
+            core::ptr::null_mut(),
+            DEINIT_TASK_PRIORITY,
+            core::ptr::null_mut(),
+            CONFIG_FREERTOS_NO_AFFINITY as i32,
+        )
+    };
+
+    info!(target: LOG_TARGET, "Delay for was_deinit_task");
+    FreeRtos::delay_ms(DEINIT_DELAY_MS);
+}
+
 pub(crate) fn send_wake_end() -> Result<(), EspError> {
     if !multiwake_enabled() {
         return Ok(());
@@ -343,6 +395,12 @@ pub extern "C" fn rust_was_request_config() {
     let _ = request_config();
 }
 
+/// Stops WAS on behalf of retained C restart and OTA paths.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_was_deinit() {
+    deinitialize();
+}
+
 /// Wraps a WIS response in the WAS endpoint command envelope.
 ///
 /// # Safety
@@ -381,10 +439,4 @@ pub extern "C" fn rust_was_send_wake_start(wake_volume: f32) {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_was_send_hello() {
     let _ = send_hello();
-}
-
-/// Sends the device identity before retained C teardown closes the connection.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_was_send_goodbye() {
-    let _ = send_goodbye();
 }

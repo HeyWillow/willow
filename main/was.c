@@ -108,7 +108,7 @@ void willow_was_event_handler(
                     rust_ui_show_center_message("Connectivity Updated");
                     rust_display_timer_reset(true);
                     rust_backlight_set(true, false);
-                    deinit_was();
+                    rust_was_deinit();
                     rust_system_restart_delayed();
                 }
 
@@ -236,7 +236,7 @@ void willow_was_event_handler(
                         ESP_LOGI(TAG, "restart command received. restart");
                         rust_ui_show_center_message("WAS Restart");
                         rust_backlight_set(true, false);
-                        deinit_was();
+                        rust_was_deinit();
                         rust_system_restart_delayed();
                     }
                 }
@@ -257,36 +257,6 @@ cleanup:
             ESP_LOGD(TAG, "unhandled WebSocket event - ID: %" PRIu32, id_ev);
             break;
     }
-}
-
-void was_deinit_task(void *data)
-{
-    esp_err_t ret = ESP_OK;
-    esp_websocket_client_handle_t client = rust_was_client_handle();
-    ESP_LOGI(TAG, "stopping WebSocket client");
-
-    ret = esp_websocket_client_close(client, 5000 / portTICK_PERIOD_MS);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "failed to cleanly close WebSocket client");
-
-        ret = esp_websocket_client_stop(client);
-        if (ret != ESP_OK) {
-            ESP_LOGE(TAG, "failed to stop WebSocket client: %s", esp_err_to_name(ret));
-        }
-    }
-
-    vTaskDelete(NULL);
-}
-
-void deinit_was(void)
-{
-    rust_state_mark_restarting();
-    rust_was_send_goodbye();
-    // needs to be done in a task to avoid this error:
-    // WEBSOCKET_CLIENT: Client cannot be stopped from websocket task
-    xTaskCreate(&was_deinit_task, "was_deinit_task", 4096, NULL, 5, NULL);
-    ESP_LOGI(TAG, "Delay for was_deinit_task");
-    vTaskDelay(2000 / portTICK_PERIOD_MS);
 }
 
 static void notify_task(void *data)

@@ -8,7 +8,6 @@
 #include "audio.h"
 #include "config.h"
 #include "rust.h"
-#include "was.h"
 
 static const char *TAG = "WILLOW/CONFIG";
 
@@ -50,7 +49,7 @@ int config_get_int(char *key, const int default_value)
 
 void config_write(const char *data)
 {
-    deinit_was();
+    rust_was_deinit();
     deinit_audio();
 
     if (!rust_config_write(data)) {

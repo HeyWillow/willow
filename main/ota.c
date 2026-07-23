@@ -6,7 +6,6 @@
 
 #include "audio.h"
 #include "rust.h"
-#include "was.h"
 
 static const char *TAG = "WILLOW/OTA";
 
@@ -30,7 +29,7 @@ void ota_start(char *url)
     rust_backlight_set(true, false);
 
     deinit_audio();
-    deinit_was();
+    rust_was_deinit();
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
     xTaskCreate(&ota_task, "ota_task", 8192, url, 5, NULL);
