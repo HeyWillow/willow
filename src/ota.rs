@@ -9,8 +9,9 @@ use esp_idf_svc::handle::RawHandle;
 use esp_idf_svc::http::client::{Configuration, EspHttpConnection, Method};
 use esp_idf_svc::ota::{EspFirmwareInfoLoad, EspOta};
 use esp_idf_sys::{
-    EspError, esp_app_desc_t, esp_http_client_is_complete_data_received, esp_image_header_t,
-    esp_image_segment_header_t, esp_task_wdt_config_t, esp_task_wdt_reconfigure,
+    EspError, esp_app_desc_t, esp_app_get_description, esp_http_client_is_complete_data_received,
+    esp_image_header_t, esp_image_segment_header_t, esp_task_wdt_config_t,
+    esp_task_wdt_reconfigure,
 };
 use log::{debug, error, info, warn};
 
@@ -130,6 +131,12 @@ fn read_image_header(
     );
 
     Ok(buffered)
+}
+
+/// Returns the version embedded in the running application image.
+pub(crate) fn running_version() -> String {
+    let description = unsafe { &*esp_app_get_description() };
+    fixed_c_string(&description.version)
 }
 
 /// Confirms the running firmware and cancels a pending rollback.

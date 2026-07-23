@@ -1,4 +1,3 @@
-#include "esp_app_desc.h"
 #include "esp_err.h"
 #include "esp_log.h"
 #include "sdkconfig.h"
@@ -47,11 +46,6 @@ void willow_init(void)
 #ifndef CONFIG_WILLOW_ETHERNET
     rust_get_mac_address(); // should be on wifi by now; print the MAC
 #endif
-
-    const esp_app_desc_t *app_desc = esp_app_get_description();
-    ESP_LOGI(TAG, "Startup complete! Hardware: %s. Version: %s. Waiting for wake word.",
-             rust_system_hardware_name(),
-             app_desc->version);
 }
 
 #ifdef WILLOW_CARGO_FIRST

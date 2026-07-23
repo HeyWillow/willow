@@ -72,6 +72,13 @@ fn main() {
     }
     ffi::init();
 
+    log::info!(
+        target: "WILLOW/MAIN",
+        "Startup complete! Hardware: {}. Version: {}. Waiting for wake word.",
+        system::hardware().name(),
+        ota::running_version()
+    );
+
     // Reaching this point is enough to mark the current partition valid, so
     // it remains the boot partition after restart. Wake handling and the main
     // loop can still fail after this point.
