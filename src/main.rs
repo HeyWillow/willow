@@ -71,6 +71,9 @@ fn main() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
     ffi::init();
+    if let Err(error) = backlight::reset_display_timer(false) {
+        log::error!(target: "WILLOW/MAIN", "failed to reset display timer: {error}");
+    }
 
     #[cfg(esp_idf_willow_debug_runtime_stats)]
     let _ = runtime_stats::start();

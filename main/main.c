@@ -57,8 +57,6 @@ void willow_init(void)
     // we can still crash on wake or other events but we should be able to do another OTA
     // we can also still crash in the while loop below - this should be improved
     ESP_ERROR_CHECK_WITHOUT_ABORT(esp_ota_mark_app_valid_cancel_rollback());
-
-    ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_timer_reset(false));
 }
 
 #ifdef WILLOW_CARGO_FIRST
