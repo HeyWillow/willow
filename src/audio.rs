@@ -8,6 +8,7 @@ mod capture;
 mod codec_ffi;
 mod codecs;
 mod es7210;
+mod i2s;
 
 use core::{ffi::c_void, ptr::NonNull};
 use std::{

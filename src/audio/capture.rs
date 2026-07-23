@@ -7,11 +7,11 @@
 
 use core::fmt;
 
-pub(super) const SAMPLE_RATE_HZ: usize = 16_000;
+pub(super) const SAMPLE_RATE_HZ: u32 = 16_000;
 pub(super) const PHYSICAL_SLOTS: usize = 2;
-pub(super) const SLOT_WIDTH_BITS: usize = 32;
+pub(super) const SLOT_WIDTH_BITS: u32 = 32;
 pub(super) const RAW_HALFWORDS: usize = PHYSICAL_SLOTS * 2;
-pub(super) const RAW_FRAME_BYTES: usize = PHYSICAL_SLOTS * SLOT_WIDTH_BITS / 8;
+pub(super) const RAW_FRAME_BYTES: usize = PHYSICAL_SLOTS * core::mem::size_of::<i32>();
 pub(super) const MICROPHONE_CHANNELS: usize = 2;
 pub(super) const MICROPHONE_HALFWORDS: [usize; MICROPHONE_CHANNELS] = [1, 3];
 
