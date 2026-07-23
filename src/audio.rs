@@ -14,6 +14,7 @@ mod i2s;
 mod ogg_headers;
 mod pcm;
 mod playback;
+mod player;
 mod spiffs_playback;
 mod spiffs_uri;
 mod stream_codec;
@@ -21,7 +22,7 @@ mod stream_codec;
 use core::{ffi::c_void, ptr::NonNull};
 use std::{
     sync::{
-        Arc, Mutex, OnceLock, PoisonError,
+        Arc, Mutex, MutexGuard, OnceLock, PoisonError,
         atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     time::Duration,
@@ -168,6 +169,13 @@ pub(crate) fn is_recording() -> bool {
 
 pub(crate) fn set_recording(recording: bool) {
     RECORDING.store(recording, Ordering::Release);
+}
+
+fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
+    match mutex.lock() {
+        Ok(value) => value,
+        Err(poisoned) => poisoned.into_inner(),
+    }
 }
 
 /// Returns the Rust-owned recorder queue as a borrowed FreeRTOS handle.

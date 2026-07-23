@@ -2,7 +2,7 @@
 
 #![allow(
     dead_code,
-    reason = "HTTP playback remains inactive until the Rust player is connected"
+    reason = "HTTP playback remains inactive until Rust owns runtime audio"
 )]
 
 use core::{fmt, time::Duration};
@@ -111,11 +111,18 @@ impl std::error::Error for HttpPlaybackError {
     }
 }
 
+impl HttpPlaybackError {
+    pub(super) const fn is_cancelled(&self) -> bool {
+        matches!(self, Self::Playback { source, .. } if source.is_cancelled())
+    }
+}
+
 pub(super) fn play(
     url: &str,
     codecs: &CodecLibrary,
     transmit: &mut TransmitChannel,
     workspace: &mut PlaybackWorkspace<'_>,
+    cancelled: &dyn Fn() -> bool,
 ) -> Result<(), HttpPlaybackError> {
     let buffer_size_tx = http_audio::transmit_buffer_size(url.len())
         .ok_or(HttpPlaybackError::UrlTooLong { bytes: url.len() })?;
@@ -172,7 +179,7 @@ pub(super) fn play(
         codecs,
         transmit,
         workspace,
-        &|| false,
+        cancelled,
     )
     .map_err(|source| HttpPlaybackError::Playback {
         url: url.to_owned(),

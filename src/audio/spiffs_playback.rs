@@ -2,7 +2,7 @@
 
 #![allow(
     dead_code,
-    reason = "the SPIFFS player remains inactive until the Rust player is connected"
+    reason = "SPIFFS playback remains inactive until Rust owns runtime audio"
 )]
 
 use core::fmt;
@@ -61,11 +61,18 @@ impl std::error::Error for SpiffsPlaybackError {
     }
 }
 
+impl SpiffsPlaybackError {
+    pub(super) const fn is_cancelled(&self) -> bool {
+        matches!(self, Self::Playback { source, .. } if source.is_cancelled())
+    }
+}
+
 pub(super) fn play(
     uri: &str,
     codecs: &CodecLibrary,
     transmit: &mut TransmitChannel,
     workspace: &mut PlaybackWorkspace<'_>,
+    cancelled: &dyn Fn() -> bool,
 ) -> Result<(), SpiffsPlaybackError> {
     let path = spiffs_uri::resolve(uri, spiffs::MOUNT_PATH.as_ref())
         .map_err(|source| SpiffsPlaybackError::Uri { source })?;
@@ -78,7 +85,7 @@ pub(super) fn play(
         source,
     })?;
 
-    playback::play_reader(&mut file, format, codecs, transmit, workspace, &|| false).map_err(
+    playback::play_reader(&mut file, format, codecs, transmit, workspace, cancelled).map_err(
         |source| SpiffsPlaybackError::Playback {
             uri: uri.to_owned(),
             source,

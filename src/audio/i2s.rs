@@ -146,6 +146,11 @@ struct Channel {
     enabled: bool,
 }
 
+// SAFETY: ESP-IDF guarantees that every public I2S API is thread-safe. The
+// Rust owner also provides exclusive access to state-changing operations and
+// transfers or drops each native channel handle exactly once.
+unsafe impl Send for Channel {}
+
 impl Channel {
     const fn new(direction: Direction, handle: NonNull<i2s_channel_obj_t>) -> Self {
         Self {
