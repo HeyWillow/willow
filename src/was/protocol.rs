@@ -14,5 +14,6 @@ pub(super) enum Command<T> {
 #[derive(Serialize)]
 #[serde(rename_all = "snake_case")]
 pub(super) enum Event {
+    WakeEnd {},
     WakeStart { wake_volume: f32 },
 }

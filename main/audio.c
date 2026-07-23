@@ -363,7 +363,7 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
             ESP_LOGI(TAG, "AUDIO_REC_WAKEUP_END");
             msg = MSG_STOP;
             xQueueSend(q_rec, &msg, 0);
-            send_wake_end();
+            rust_was_send_wake_end();
             break;
         case AUDIO_REC_WAKEUP_START:
             ESP_LOGI(TAG, "AUDIO_REC_WAKEUP_START");

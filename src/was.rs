@@ -142,11 +142,32 @@ pub(crate) fn request_config() -> Result<(), EspError> {
     })
 }
 
-pub(crate) fn send_wake_start(wake_volume: f32) -> Result<(), EspError> {
-    let multiwake = config::config()
+fn multiwake_enabled() -> bool {
+    config::config()
         .and_then(|config| config.multiwake)
-        .unwrap_or(false);
-    if !multiwake {
+        .unwrap_or(false)
+}
+
+pub(crate) fn send_wake_end() -> Result<(), EspError> {
+    if !multiwake_enabled() {
+        return Ok(());
+    }
+
+    if !is_connected(false) {
+        warn!(target: LOG_TARGET, "Websocket not connected - skipping wake end");
+        return Ok(());
+    }
+
+    let message = serde_json::to_string(&Event::WakeEnd {})
+        .map_err(|_| EspError::from_infallible::<ESP_FAIL>())?;
+
+    send_text(&message).map(|_| ()).inspect_err(|_| {
+        error!(target: LOG_TARGET, "failed to send WAS wake_end message");
+    })
+}
+
+pub(crate) fn send_wake_start(wake_volume: f32) -> Result<(), EspError> {
+    if !multiwake_enabled() {
         return Ok(());
     }
 
@@ -284,6 +305,12 @@ pub unsafe extern "C" fn rust_was_send_endpoint(json: *const c_char) -> esp_err_
         |error| error.code(),
         |sent| i32::try_from(sent).unwrap_or(i32::MAX),
     )
+}
+
+/// Sends a wake-end event from the retained C recorder callback.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_was_send_wake_end() {
+    let _ = send_wake_end();
 }
 
 /// Sends a wake-start event from the retained C recorder callback.

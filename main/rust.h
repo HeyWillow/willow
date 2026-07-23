@@ -42,6 +42,7 @@ bool rust_was_is_connected(bool wait);
 SemaphoreHandle_t rust_was_notify_mutex(void);
 void rust_was_request_config(void);
 esp_err_t rust_was_send_endpoint(const char *json);
+void rust_was_send_wake_end(void);
 void rust_was_send_wake_start(float wake_volume);
 void rust_ui_hide_connecting(void);
 void rust_ui_notification_end(void);
