@@ -29,6 +29,15 @@ fn main() {
         EspSystemEventLoop::take().expect("failed to initialize default event loop");
     system::log_hardware();
 
+    match spiffs::mount() {
+        Ok(()) => log::info!(target: "WILLOW/MAIN", "SPIFFS mounted"),
+        Err(error) => {
+            log::error!(target: "WILLOW/MAIN", "failed to mount SPIFFS user partition: {error}");
+            // Preserve the old wait for the filesystem to become mounted.
+            unsafe { esp_idf_sys::vTaskDelay(u32::MAX) }
+        }
+    }
+
     if let Err(error) = audio::initialize_recorder_queue() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize recorder queue: {error}");
         unsafe { esp_idf_sys::esp_system_abort(c"recorder queue initialization failed".as_ptr()) }
@@ -40,7 +49,6 @@ fn main() {
     if let Err(error) = input::init() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
-
     ffi::init();
 
     loop {

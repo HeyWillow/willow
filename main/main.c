@@ -34,11 +34,6 @@ void willow_init(void)
 {
     esp_err_t err;
 
-    err = rust_spiffs_mount();
-    if (err != ESP_OK) {
-        // Preserve the old wait for the filesystem to become mounted.
-        vTaskDelay(portMAX_DELAY);
-    }
     config_parse();
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_init());
     ESP_ERROR_CHECK_WITHOUT_ABORT(rust_ui_init());
