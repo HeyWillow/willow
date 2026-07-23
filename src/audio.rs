@@ -9,7 +9,11 @@ mod codec_ffi;
 mod codecs;
 mod es7210;
 mod i2s;
+mod ogg_headers;
 mod pcm;
+mod playback;
+mod spiffs_playback;
+mod spiffs_uri;
 mod stream_codec;
 
 use core::{ffi::c_void, ptr::NonNull};

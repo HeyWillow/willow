@@ -5,7 +5,7 @@ use esp_idf_sys::{ESP_ERR_INVALID_STATE, EspError};
 use std::sync::OnceLock;
 
 const MAX_OPEN_FILES: usize = 5;
-const MOUNT_PATH: &str = "/spiffs/user";
+pub(crate) const MOUNT_PATH: &str = "/spiffs/user";
 const PARTITION_LABEL: &str = "user";
 
 static USER_SPIFFS: OnceLock<MountedSpiffs<Spiffs>> = OnceLock::new();
