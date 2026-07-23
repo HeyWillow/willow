@@ -8,15 +8,14 @@ use std::rc::Rc;
 use esp_idf_sys::esp_sr as raw;
 use sha2::{Digest, Sha256};
 
-use super::fixture::{PACK_HEADER_LENGTH, validate_pack};
-use super::{FrameSpec, InputFormat, ModelFixture, Sha256Digest, SrError};
+use super::fixture::{PACK_HEADER_LENGTH, PackedFile, validate_pack};
+use super::{FrameSpec, InputFormat, Sha256Digest, SrError, WakeModel};
 
 const EXPECTED_PARTITION_ADDRESS: u32 = 0x0063_0000;
 const EXPECTED_PARTITION_SIZE: u32 = 0x0060_0000;
 const MMU_PAGE_SIZE: u64 = 64 * 1024;
 const HASH_CHUNK_SIZE: usize = 4096;
 const HASH_CHUNK_SIZE_U32: u32 = 4096;
-const TRUNCATED_ERASED_TAIL_MIN: usize = 256;
 
 static PROCESS_LEASED: AtomicBool = AtomicBool::new(false);
 
@@ -31,17 +30,17 @@ pub(super) struct Frontend {
 }
 
 impl Frontend {
-    pub(super) fn open(fixture: &ModelFixture, input: InputFormat) -> Result<Self, SrError> {
+    pub(super) fn open(model: WakeModel, input: InputFormat) -> Result<Self, SrError> {
         validate_input(input)?;
 
-        let partition_label = CString::new(fixture.partition_label().to_bytes())
+        let partition_label = CString::new(c"model".to_bytes())
             .map_err(|_| SrError::InternalInvariant("partition label contains NUL"))?;
-        let wake_model = CString::new(fixture.model_name().to_bytes())
+        let wake_model = CString::new(model.name())
             .map_err(|_| SrError::InternalInvariant("model name contains NUL"))?;
 
         let partition = Partition::find(partition_label.as_c_str())?;
         partition.validate_geometry()?;
-        preflight_fixture(&partition, fixture)?;
+        let expected_model_count = preflight_pack(&partition)?;
         partition.validate_mmap_capacity()?;
 
         let process_lease = ProcessLease::acquire()?;
@@ -50,7 +49,7 @@ impl Frontend {
         }
 
         let models = ModelLease::load(process_lease, partition_label.as_c_str())?;
-        let selected_model = models.require_model(wake_model.as_c_str())?;
+        let selected_model = models.require_model(wake_model.as_c_str(), expected_model_count)?;
         let interface = AfeInterface::load()?;
         interface.validate_required_functions()?;
 
@@ -203,31 +202,28 @@ impl Partition {
     }
 }
 
-fn preflight_fixture(partition: &Partition, fixture: &ModelFixture) -> Result<(), SrError> {
+fn preflight_pack(partition: &Partition) -> Result<usize, SrError> {
     let mut header = [0_u8; PACK_HEADER_LENGTH];
     partition.read(0, &mut header)?;
-    if header.iter().all(|byte| *byte == 0xff) {
-        return Err(SrError::ErasedFixture);
+    let pack = validate_pack(&header)?;
+    let model_count = pack.model_count();
+    for packed_file in pack.files() {
+        validate_packed_file(partition, packed_file)?;
     }
+    Ok(model_count)
+}
 
+fn validate_packed_file(partition: &Partition, packed_file: PackedFile) -> Result<(), SrError> {
     let mut hasher = Sha256::new();
     let mut buffer = [0_u8; HASH_CHUNK_SIZE];
-    let mut offset = 0_u32;
-    let mut remaining = fixture.image_len();
-    let mut trailing_erased = 0_usize;
+    let mut offset = packed_file.offset();
+    let mut remaining = packed_file.length();
 
     while remaining != 0 {
         let count = usize::try_from(remaining.min(HASH_CHUNK_SIZE_U32))
             .map_err(|_| SrError::InternalInvariant("hash chunk does not fit usize"))?;
         partition.read(offset, &mut buffer[..count])?;
         hasher.update(&buffer[..count]);
-        for byte in &buffer[..count] {
-            if *byte == 0xff {
-                trailing_erased += 1;
-            } else {
-                trailing_erased = 0;
-            }
-        }
         let count = u32::try_from(count)
             .map_err(|_| SrError::InternalInvariant("hash offset does not fit u32"))?;
         offset = offset
@@ -237,16 +233,15 @@ fn preflight_fixture(partition: &Partition, fixture: &ModelFixture) -> Result<()
     }
 
     let actual = Sha256Digest(hasher.finalize().into());
-    if actual != fixture.expected_sha256() {
-        if trailing_erased >= TRUNCATED_ERASED_TAIL_MIN {
-            return Err(SrError::TruncatedFixture {
-                erased_tail_bytes: trailing_erased,
-            });
-        }
-        return Err(SrError::FixtureHashMismatch { actual });
+    if actual != packed_file.expected_sha256() {
+        return Err(SrError::PackedFileHashMismatch {
+            model: packed_file.model_name(),
+            file: packed_file.file_name(),
+            actual,
+        });
     }
 
-    validate_pack(&header, fixture)
+    Ok(())
 }
 
 fn static_models_are_initialized() -> bool {
@@ -277,36 +272,58 @@ impl ModelLease {
         })
     }
 
-    fn require_model(&self, model_name: &CStr) -> Result<SelectedModel, SrError> {
+    fn require_model(
+        &self,
+        model_name: &CStr,
+        expected_model_count: usize,
+    ) -> Result<SelectedModel, SrError> {
         let query_name = model_name.as_ptr().cast_mut();
         // SAFETY: both pointers remain valid for the call; ESP-SR does not take
         // ownership of the query string.
         let index = unsafe { raw::esp_srmodel_exists(self.ptr.as_ptr(), query_name) };
-        if index != 0 {
-            return Err(SrError::MissingHeyWillowModel);
+        if index < 0 {
+            return Err(SrError::MissingWakeModel(
+                model_name.to_string_lossy().into_owned(),
+            ));
         }
+        let index = usize::try_from(index)
+            .map_err(|_| SrError::InvalidModelList("model index does not fit usize"))?;
 
         // SAFETY: `ModelLease` exclusively owns a non-null loader result until
         // `Drop`, and no deinit can run while `self` is borrowed.
         let models = unsafe { self.ptr.as_ref() };
-        if models.num != 1 || models.model_name.is_null() {
-            return Err(SrError::MissingHeyWillowModel);
+        let model_count = usize::try_from(models.num)
+            .map_err(|_| SrError::InvalidModelList("model count does not fit usize"))?;
+        if model_count != expected_model_count {
+            return Err(SrError::InvalidModelList(
+                "model count does not match the reviewed pack",
+            ));
         }
-        // SAFETY: the reviewed pack has exactly one model and the loader reported
-        // `num == 1` with a non-null pointer table.
-        let loaded_name = unsafe { *models.model_name };
+        if models.model_name.is_null() {
+            return Err(SrError::InvalidModelList("model-name table is null"));
+        }
+        if index >= model_count {
+            return Err(SrError::InvalidModelList(
+                "model index falls outside the model-name table",
+            ));
+        }
+        // SAFETY: the loader count matches the preflighted pack, `model_name`
+        // is non-null, and `index` was checked against that count.
+        let loaded_name = unsafe { *models.model_name.add(index) };
         if loaded_name.is_null() {
-            return Err(SrError::MissingHeyWillowModel);
+            return Err(SrError::InvalidModelList("selected model name is null"));
         }
-        // SAFETY: exact-hash structural preflight proves the 32-byte packed name
-        // is NUL-terminated; ESP-SR copied it into loader-owned live storage.
+        // SAFETY: per-file structural preflight proves every packed name is
+        // NUL-terminated; ESP-SR copied it into loader-owned live storage.
         let loaded = unsafe { CStr::from_ptr(loaded_name) };
         if loaded != model_name {
-            return Err(SrError::MissingHeyWillowModel);
+            return Err(SrError::InvalidModelList(
+                "selected model name differs from the requested model",
+            ));
         }
 
         Ok(SelectedModel {
-            index: 0,
+            index,
             name: loaded_name,
         })
     }

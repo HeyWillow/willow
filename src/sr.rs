@@ -10,7 +10,6 @@
 mod ffi;
 mod fixture;
 
-use core::ffi::CStr;
 use core::fmt;
 use core::mem::{align_of, size_of};
 
@@ -37,6 +36,18 @@ const _: () = {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct Sha256Digest([u8; 32]);
 
+impl Sha256Digest {
+    const fn from_hex(hex: &[u8; 64]) -> Self {
+        let mut bytes = [0_u8; 32];
+        let mut index = 0;
+        while index < bytes.len() {
+            bytes[index] = (hex_nibble(hex[index * 2]) << 4) | hex_nibble(hex[index * 2 + 1]);
+            index += 1;
+        }
+        Self(bytes)
+    }
+}
+
 impl fmt::Display for Sha256Digest {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         for byte in self.0 {
@@ -46,55 +57,30 @@ impl fmt::Display for Sha256Digest {
     }
 }
 
-struct ModelFixture {
-    partition_label: &'static CStr,
-    model_name: &'static CStr,
-    image_len: u32,
-    sha256: Sha256Digest,
+const fn hex_nibble(byte: u8) -> u8 {
+    match byte {
+        b'0'..=b'9' => byte - b'0',
+        b'a'..=b'f' => byte - b'a' + 10,
+        _ => 0,
+    }
 }
 
-impl ModelFixture {
-    const fn reviewed(
-        partition_label: &'static CStr,
-        model_name: &'static CStr,
-        image_len: u32,
-        sha256: [u8; 32],
-    ) -> Self {
-        Self {
-            partition_label,
-            model_name,
-            image_len,
-            sha256: Sha256Digest(sha256),
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+enum WakeModel {
+    Alexa,
+    HiEsp,
+    HiLexin,
+}
+
+impl WakeModel {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Alexa => "wn9_alexa",
+            Self::HiEsp => "wn9_hiesp",
+            Self::HiLexin => "wn9_hilexin",
         }
     }
-
-    const fn partition_label(&self) -> &'static CStr {
-        self.partition_label
-    }
-
-    const fn model_name(&self) -> &'static CStr {
-        self.model_name
-    }
-
-    const fn image_len(&self) -> u32 {
-        self.image_len
-    }
-
-    const fn expected_sha256(&self) -> Sha256Digest {
-        self.sha256
-    }
 }
-
-static HEY_WILLOW_FIXTURE: ModelFixture = ModelFixture::reviewed(
-    c"model",
-    c"wn9_heywillow_tts",
-    291_040,
-    [
-        0x66, 0x19, 0x32, 0x4d, 0xd6, 0x8d, 0x66, 0xd0, 0xee, 0xb2, 0x11, 0xda, 0x9d, 0x23, 0xa9,
-        0xe2, 0x07, 0xfc, 0x77, 0x93, 0xf5, 0x7e, 0x4a, 0xed, 0x12, 0x76, 0xc2, 0x69, 0xd0, 0x41,
-        0x80, 0xaf,
-    ],
-);
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 struct InputFormat {
@@ -134,8 +120,8 @@ struct SpeechFrontend {
 }
 
 impl SpeechFrontend {
-    fn open(fixture: &ModelFixture, input: InputFormat) -> Result<Self, SrError> {
-        ffi::Frontend::open(fixture, input).map(|inner| Self { inner })
+    fn open(model: WakeModel, input: InputFormat) -> Result<Self, SrError> {
+        ffi::Frontend::open(model, input).map(|inner| Self { inner })
     }
 
     const fn frame_spec(&self) -> FrameSpec {
@@ -161,14 +147,13 @@ enum SrError {
         offset: u32,
         code: i32,
     },
-    ErasedFixture,
-    TruncatedFixture {
-        erased_tail_bytes: usize,
-    },
-    FixtureHashMismatch {
+    ErasedPack,
+    PackedFileHashMismatch {
+        model: &'static str,
+        file: &'static str,
         actual: Sha256Digest,
     },
-    InvalidPack(&'static str),
+    InvalidPack(String),
     InsufficientMmapSpace {
         free_bytes: u64,
         required_bytes: u64,
@@ -176,7 +161,8 @@ enum SrError {
     AlreadyOpen,
     ExternalModelState,
     ModelLoadFailed,
-    MissingHeyWillowModel,
+    MissingWakeModel(String),
+    InvalidModelList(&'static str),
     MissingAfeFunction(&'static str),
     AfeCreateFailed,
     UnsupportedInputFormat(InputFormat),
@@ -209,14 +195,15 @@ impl fmt::Display for SrError {
                     "partition read failed at {offset:#x}: ESP error {code:#x}"
                 )
             }
-            Self::ErasedFixture => write!(formatter, "model partition is erased"),
-            Self::TruncatedFixture { erased_tail_bytes } => write!(
+            Self::ErasedPack => write!(formatter, "model partition is erased"),
+            Self::PackedFileHashMismatch {
+                model,
+                file,
+                actual,
+            } => write!(
                 formatter,
-                "model fixture appears truncated ({erased_tail_bytes} erased trailing bytes)"
+                "model-pack file SHA-256 mismatch: model={model} file={file} got={actual}"
             ),
-            Self::FixtureHashMismatch { actual } => {
-                write!(formatter, "model fixture SHA-256 mismatch: got {actual}")
-            }
             Self::InvalidPack(reason) => write!(formatter, "invalid model pack: {reason}"),
             Self::InsufficientMmapSpace {
                 free_bytes,
@@ -231,10 +218,13 @@ impl fmt::Display for SrError {
                 "ESP-SR's global model singleton was initialized outside Willow"
             ),
             Self::ModelLoadFailed => {
-                write!(formatter, "ESP-SR rejected the reviewed model fixture")
+                write!(formatter, "ESP-SR rejected the reviewed model pack")
             }
-            Self::MissingHeyWillowModel => {
-                write!(formatter, "wn9_heywillow_tts is absent from the model pack")
+            Self::MissingWakeModel(model) => {
+                write!(formatter, "{model} is absent from the model pack")
+            }
+            Self::InvalidModelList(reason) => {
+                write!(formatter, "ESP-SR returned an invalid model list: {reason}")
             }
             Self::MissingAfeFunction(name) => {
                 write!(formatter, "ESP-SR AFE function pointer is null: {name}")
