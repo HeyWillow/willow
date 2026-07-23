@@ -24,9 +24,9 @@ use esp_idf_sys::{
 use log::{error, info, warn};
 use serde_json::Value;
 
-use crate::{state, ui};
+use crate::{config, state, ui};
 
-use self::protocol::Command;
+use self::protocol::{Command, Event};
 
 const LOG_TARGET: &str = "WILLOW/WAS";
 const USER_AGENT: &str = concat!("Willow/", env!("WILLOW_VERSION"));
@@ -139,6 +139,27 @@ pub(crate) fn request_config() -> Result<(), EspError> {
 
     send_text(&message).map(|_| ()).inspect_err(|_| {
         error!(target: LOG_TARGET, "failed to send WAS get_config message");
+    })
+}
+
+pub(crate) fn send_wake_start(wake_volume: f32) -> Result<(), EspError> {
+    let multiwake = config::config()
+        .and_then(|config| config.multiwake)
+        .unwrap_or(false);
+    if !multiwake {
+        return Ok(());
+    }
+
+    if !is_connected(false) {
+        warn!(target: LOG_TARGET, "Websocket not connected - skipping wake start");
+        return Ok(());
+    }
+
+    let message = serde_json::to_string(&Event::WakeStart { wake_volume })
+        .map_err(|_| EspError::from_infallible::<ESP_FAIL>())?;
+
+    send_text(&message).map(|_| ()).inspect_err(|_| {
+        error!(target: LOG_TARGET, "failed to send WAS wake_start message");
     })
 }
 
@@ -263,4 +284,10 @@ pub unsafe extern "C" fn rust_was_send_endpoint(json: *const c_char) -> esp_err_
         |error| error.code(),
         |sent| i32::try_from(sent).unwrap_or(i32::MAX),
     )
+}
+
+/// Sends a wake-start event from the retained C recorder callback.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_was_send_wake_start(wake_volume: f32) {
+    let _ = send_wake_start(wake_volume);
 }

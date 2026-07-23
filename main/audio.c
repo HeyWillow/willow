@@ -379,7 +379,7 @@ static esp_err_t cb_ar_event(audio_rec_evt_t *are, void *data)
             multiwake_won = true;
             recorder_sr_wakeup_result_t *wake_data = are->event_data;
             ESP_LOGI(TAG, "wake volume: %f", wake_data->data_volume);
-            send_wake_start(wake_data->data_volume);
+            rust_was_send_wake_start(wake_data->data_volume);
             rust_display_timer_reset(true);
             rust_audio_session_timer_reset(
                 hdl_ar, config_get_int("stream_timeout", DEFAULT_STREAM_TIMEOUT));

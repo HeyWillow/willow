@@ -353,44 +353,6 @@ cleanup:
     cJSON_Delete(cjson);
 }
 
-void IRAM_ATTR send_wake_start(float wake_volume)
-{
-    char *json;
-    esp_err_t ret;
-
-    // Silently return if multiwake is not enabled - defaults to not enabled
-    if (!config_get_bool("multiwake", false)) {
-        return;
-    }
-
-    if (!rust_was_is_connected(false)) {
-        ESP_LOGW(TAG, "Websocket not connected - skipping wake start");
-        return;
-    }
-
-    cJSON *cjson = cJSON_CreateObject();
-    cJSON *wake_start = cJSON_CreateObject();
-
-    if (!cJSON_AddNumberToObject(wake_start, "wake_volume", wake_volume)) {
-        goto cleanup;
-    }
-    if (!cJSON_AddItemToObjectCS(cjson, "wake_start", wake_start)) {
-        goto cleanup;
-    }
-
-    json = cJSON_Print(cjson);
-
-    ret = esp_websocket_client_send_text(
-        rust_was_client_handle(), json, strlen(json), 2000 / portTICK_PERIOD_MS);
-    cJSON_free(json);
-    if (ret < 0) {
-        ESP_LOGE(TAG, "failed to send WAS wake_start message");
-    }
-
-cleanup:
-    cJSON_Delete(cjson);
-}
-
 void send_wake_end(void)
 {
     char *json;
