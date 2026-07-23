@@ -9,6 +9,7 @@ mod codec_ffi;
 mod codecs;
 mod es7210;
 mod http_audio;
+mod http_chunk;
 mod http_playback;
 mod i2s;
 mod ogg_headers;
@@ -23,6 +24,7 @@ mod stream_codec;
 mod wis_config;
 mod wis_encoder;
 mod wis_framing;
+mod wis_upload;
 
 use core::{ffi::c_void, ptr::NonNull};
 use std::{
