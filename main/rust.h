@@ -14,7 +14,6 @@ i2c_master_bus_handle_t rust_i2c_master_handle(void);
 void rust_backlight_set(bool on, bool maximum);
 esp_err_t rust_backlight_strobe_start(uint32_t period_ms);
 void rust_backlight_strobe_stop(void);
-esp_err_t rust_display_timer_init(void);
 esp_err_t rust_display_timer_reset(bool pause);
 bool rust_input_is_muted(void);
 esp_err_t rust_input_monitor_start(int32_t unmute_event);

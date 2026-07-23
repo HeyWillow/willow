@@ -191,7 +191,7 @@ fn display_timer(commands: Receiver<DisplayTimerAction>, acknowledge: Arc<Queue<
     }
 }
 
-fn initialize_display_timer() -> Result<(), EspError> {
+pub(crate) fn initialize_display_timer() -> Result<(), EspError> {
     if DISPLAY_TIMER.get().is_some() {
         return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
     }
@@ -343,15 +343,6 @@ fn stop_strobe() {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_backlight_set(on: bool, maximum: bool) {
     set(on, maximum);
-}
-
-/// Creates and retains the display timeout worker.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_display_timer_init() -> esp_err_t {
-    match initialize_display_timer() {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
-    }
 }
 
 /// Stops the display timer and optionally schedules its next timeout.

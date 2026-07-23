@@ -39,7 +39,6 @@ void willow_init(void)
     }
 
     init_audio();
-    ESP_ERROR_CHECK_WITHOUT_ABORT(rust_display_timer_init());
 }
 
 #ifdef WILLOW_CARGO_FIRST

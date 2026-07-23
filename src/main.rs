@@ -71,6 +71,9 @@ fn main() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
     ffi::init();
+    if let Err(error) = backlight::initialize_display_timer() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize display timer: {error}");
+    }
     if let Err(error) = ui::initialize_touch() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize UI touch: {error}");
     }
