@@ -71,7 +71,7 @@ void set_hostname(esp_netif_t *netif, esp_mac_type_t mac_type)
     }
 }
 
-static esp_err_t init_sntp(void)
+esp_err_t init_sntp(void)
 {
     ESP_LOGI(TAG, "initializing SNTP client");
     esp_err_t ret = ESP_OK;
@@ -95,7 +95,7 @@ static esp_err_t init_sntp(void)
     return ret;
 }
 
-static esp_err_t start_sntp(void)
+esp_err_t start_sntp(void)
 {
     char *ntp_config = config_get_char("ntp_config", DEFAULT_NTP_CONFIG);
     if (strcmp(ntp_config, "DHCP") == 0) {

@@ -83,6 +83,8 @@ esp_err_t init_ethernet(void)
 {
     esp_err_t ret = ESP_OK;
 
+    init_sntp();
+
     // Start Ethernet
     if (lvgl_port_lock(lvgl_lock_timeout)) {
         lv_obj_clear_flag(lbl_ln4, LV_OBJ_FLAG_HIDDEN);
@@ -187,6 +189,8 @@ esp_err_t init_ethernet(void)
 
     // HACK
     vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+    start_sntp();
 
     return ret;
 }
