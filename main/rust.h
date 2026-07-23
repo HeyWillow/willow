@@ -24,6 +24,7 @@ intptr_t rust_config_get_char_len(const char *key);
 int64_t rust_config_get_int(const char *key);
 bool rust_config_is_valid(void);
 bool rust_config_write(const char *data);
+void rust_crypto_init(void);
 esp_err_t rust_ethernet_init(esp_netif_t **network_interface);
 void rust_get_mac_address(void);
 bool rust_nvs_apply(const char *data);

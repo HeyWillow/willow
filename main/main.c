@@ -13,10 +13,6 @@
 #include "tasks.h"
 #include "was.h"
 
-#ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
-#include "psa/crypto.h"
-#endif
-
 #define DEFAULT_WIS_URL "https://infer.tovera.io/api/willow"
 
 #define I2S_PORT I2S_NUM_0
@@ -42,11 +38,7 @@ void willow_init(void)
 #endif
 
 #ifdef CONFIG_MBEDTLS_SSL_PROTO_TLS1_3
-    // initialize mbedtls PSA library after wifi to have entropy
-    psa_status_t status = psa_crypto_init();
-    if (status != PSA_SUCCESS) {
-        ESP_LOGE(TAG, "failed to initialize Mbed TLS PSA library, TLS will not work");
-    }
+    rust_crypto_init();
 #endif
 
     if (!rust_nvs_read_was_url(was_url, sizeof(was_url))) {

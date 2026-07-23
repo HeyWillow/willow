@@ -1,6 +1,8 @@
 mod audio;
 mod backlight;
 mod config;
+#[cfg(esp_idf_mbedtls_ssl_proto_tls1_3)]
+mod crypto;
 mod display;
 mod ffi;
 mod i2c;
