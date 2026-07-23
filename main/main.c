@@ -94,10 +94,11 @@ void app_main(void)
         ESP_ERROR_CHECK(nvs_flash_init());
     }
 
+    nvs_handle_t hdl_nvs;
+
 #ifdef CONFIG_WILLOW_ETHERNET
     init_ethernet();
 #else
-    nvs_handle_t hdl_nvs;
     err = nvs_open("WIFI", NVS_READONLY, &hdl_nvs);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to open NVS namespace WIFI: %s", esp_err_to_name(err));
