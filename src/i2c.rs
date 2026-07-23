@@ -8,8 +8,10 @@ use std::sync::OnceLock;
 
 use esp_idf_sys::{
     ESP_ERR_INVALID_STATE, EspError, esp_err_t, gpio_num_t_GPIO_NUM_8, gpio_num_t_GPIO_NUM_18,
-    i2c_del_master_bus, i2c_master_bus_config_t, i2c_master_bus_config_t__bindgen_ty_1,
-    i2c_master_bus_config_t__bindgen_ty_2, i2c_master_bus_handle_t, i2c_master_probe,
+    i2c_addr_bit_len_t_I2C_ADDR_BIT_LEN_7, i2c_del_master_bus, i2c_device_config_t,
+    i2c_master_bus_add_device, i2c_master_bus_config_t, i2c_master_bus_config_t__bindgen_ty_1,
+    i2c_master_bus_config_t__bindgen_ty_2, i2c_master_bus_handle_t, i2c_master_bus_rm_device,
+    i2c_master_dev_handle_t, i2c_master_probe, i2c_master_transmit, i2c_master_transmit_receive,
     i2c_new_master_bus, i2c_port_num_t, i2c_port_t_I2C_NUM_0,
     soc_periph_i2c_clk_src_t_I2C_CLK_SRC_DEFAULT,
 };
@@ -42,6 +44,95 @@ impl Drop for I2cBus {
 
 static I2C_BUS: OnceLock<I2cBus> = OnceLock::new();
 
+/// An addressed device attached to the shared Rust-owned I2C0 master bus.
+#[allow(
+    dead_code,
+    reason = "the Rust codec migration will consume this prepared owner"
+)]
+pub(crate) struct I2cDevice {
+    address: u16,
+    handle: usize,
+}
+
+#[allow(
+    dead_code,
+    reason = "the Rust codec migration will consume this prepared owner"
+)]
+impl I2cDevice {
+    /// Attaches a seven-bit-addressed device to the initialized shared bus.
+    pub(crate) fn new(address: u16, scl_speed_hz: u32) -> Result<Self, EspError> {
+        let bus = handle().ok_or_else(EspError::from_infallible::<ESP_ERR_INVALID_STATE>)?;
+        let configuration = i2c_device_config_t {
+            dev_addr_length: i2c_addr_bit_len_t_I2C_ADDR_BIT_LEN_7,
+            device_address: address,
+            scl_speed_hz,
+            ..Default::default()
+        };
+        let mut handle = ptr::null_mut();
+        // SAFETY: the retained bus handle is live, and both configuration and
+        // output storage remain valid for this synchronous call.
+        esp_result(unsafe {
+            i2c_master_bus_add_device(bus, &raw const configuration, &raw mut handle)
+        })?;
+        if handle.is_null() {
+            return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
+        }
+
+        Ok(Self {
+            address,
+            handle: handle as usize,
+        })
+    }
+
+    /// Writes one complete transaction to this device.
+    pub(crate) fn write(&mut self, bytes: &[u8], timeout_ms: i32) -> Result<(), EspError> {
+        // SAFETY: this owner contains a live device handle. No asynchronous
+        // callback is installed, so the input slice need only outlive the call.
+        esp_result(unsafe {
+            i2c_master_transmit(self.handle(), bytes.as_ptr(), bytes.len(), timeout_ms)
+        })
+    }
+
+    /// Writes and then reads in one transaction with a repeated start.
+    pub(crate) fn write_read(
+        &mut self,
+        bytes: &[u8],
+        output: &mut [u8],
+        timeout_ms: i32,
+    ) -> Result<(), EspError> {
+        // SAFETY: this owner contains a live device handle. The input and
+        // output slices remain valid for the complete synchronous transaction.
+        esp_result(unsafe {
+            i2c_master_transmit_receive(
+                self.handle(),
+                bytes.as_ptr(),
+                bytes.len(),
+                output.as_mut_ptr(),
+                output.len(),
+                timeout_ms,
+            )
+        })
+    }
+
+    fn handle(&self) -> i2c_master_dev_handle_t {
+        self.handle as i2c_master_dev_handle_t
+    }
+}
+
+impl Drop for I2cDevice {
+    fn drop(&mut self) {
+        // SAFETY: only this owner can remove its live device handle, and all
+        // operations are synchronous mutable borrows which have ended.
+        if let Err(error) = esp_result(unsafe { i2c_master_bus_rm_device(self.handle()) }) {
+            error!(
+                target: LOG_TARGET,
+                "failed to remove I2C device at 0x{:02x}: {error}",
+                self.address
+            );
+        }
+    }
+}
+
 pub(crate) fn handle() -> Option<i2c_master_bus_handle_t> {
     I2C_BUS.get().map(I2cBus::handle)
 }
@@ -61,6 +152,10 @@ fn check(result: esp_err_t, operation: &str) -> Result<(), EspError> {
     } else {
         Ok(())
     }
+}
+
+fn esp_result(result: esp_err_t) -> Result<(), EspError> {
+    EspError::from(result).map_or(Ok(()), Err)
 }
 
 /// Initializes and retains the I2C0 master bus.
