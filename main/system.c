@@ -1,13 +1,6 @@
-#include <stdio.h>
-
 #include "esp_log.h"
-#include "esp_random.h"
-#include "freertos/FreeRTOS.h"
-#include "freertos/task.h"
 #include "sdkconfig.h"
 
-#include "rust.h"
-#include "shared.h"
 #include "system.h"
 
 static const char *TAG = "WILLOW/SYSTEM";
@@ -45,24 +38,4 @@ static void set_hw_type(void)
 void init_system(void)
 {
     set_hw_type();
-}
-
-void restart_delayed(void)
-{
-    uint32_t delay = esp_random() % 9;
-    if (delay < 3) {
-        delay = 3;
-    } else if (delay > 6) {
-        delay = 6;
-    }
-
-    ESP_LOGI(TAG, "restarting after %" PRIu32 " seconds", delay);
-
-    char message[32];
-    snprintf(message, sizeof(message), "Restarting in %" PRIu32 " seconds", delay);
-    rust_ui_show_connecting(message);
-
-    delay *= 1000;
-    vTaskDelay(delay / portTICK_PERIOD_MS);
-    esp_restart();
 }

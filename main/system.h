@@ -10,4 +10,3 @@ extern enum willow_hw_t hw_type;
 
 const char *str_hw_type(int id);
 void init_system(void);
-void restart_delayed(void);

@@ -167,7 +167,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                     rust_display_timer_reset(true);
                     rust_backlight_set(true, false);
                     deinit_was();
-                    restart_delayed();
+                    rust_system_restart_delayed();
                 }
 
                 cJSON *json_cmd = cJSON_GetObjectItemCaseSensitive(cjson, "cmd");
@@ -295,7 +295,7 @@ static void cb_ws_event(const void *arg_evh, const esp_event_base_t *base_ev, co
                         rust_ui_show_center_message("WAS Restart");
                         rust_backlight_set(true, false);
                         deinit_was();
-                        restart_delayed();
+                        rust_system_restart_delayed();
                     }
                 }
 

@@ -8,6 +8,7 @@ mod input;
 mod logging;
 mod spiffs;
 mod state;
+mod system;
 mod ui;
 
 use esp_idf_svc::eventloop::EspSystemEventLoop;

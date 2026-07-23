@@ -12,7 +12,6 @@
 #include "config.h"
 #include "rust.h"
 #include "shared.h"
-#include "system.h"
 #include "was.h"
 
 #define CONFIG_PATH "/spiffs/user/config/willow.json"
@@ -81,5 +80,5 @@ close:
     rust_ui_show_center_message("Configuration Updated");
     rust_display_timer_reset(true);
     rust_backlight_set(true, false);
-    restart_delayed();
+    rust_system_restart_delayed();
 }

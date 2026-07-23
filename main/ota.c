@@ -13,7 +13,6 @@
 #include "http.h"
 #include "rust.h"
 #include "shared.h"
-#include "system.h"
 #include "was.h"
 
 #define BUFSIZE 4096
@@ -148,14 +147,14 @@ void ota_task(void *data)
 
     ESP_LOGI(TAG, "OTA completed, restarting");
     rust_ui_show_center_message("Upgrade Done");
-    restart_delayed();
+    rust_system_restart_delayed();
 err:
     esp_ota_abort(hdl_ota);
     esp_http_client_close(hdl_hc);
     esp_http_client_cleanup(hdl_hc);
     ESP_LOGI(TAG, "OTA failed, restarting");
     rust_ui_show_center_message("Upgrade Failed");
-    restart_delayed();
+    rust_system_restart_delayed();
     vTaskDelete(NULL);
 }
 
