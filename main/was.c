@@ -43,7 +43,7 @@ void willow_was_event_handler(
             ESP_LOGI(TAG, "WebSocket connected");
             send_hello_goodbye("hello");
             if (!rust_config_is_valid()) {
-                request_config();
+                rust_was_request_config();
             }
             rust_ui_hide_connecting();
             break;
@@ -292,35 +292,6 @@ void deinit_was(void)
     xTaskCreate(&was_deinit_task, "was_deinit_task", 4096, NULL, 5, NULL);
     ESP_LOGI(TAG, "Delay for was_deinit_task");
     vTaskDelay(2000 / portTICK_PERIOD_MS);
-}
-
-void request_config(void)
-{
-    cJSON *cjson = NULL;
-    char *json = NULL;
-    esp_err_t ret;
-
-    // not sure if we should wait here as we call request_config on WEBSOCKET_EVENT_CONNECTED
-    if (!rust_was_is_connected(true)) {
-        return;
-    }
-
-    cjson = cJSON_CreateObject();
-    if (cJSON_AddStringToObject(cjson, "cmd", "get_config") == NULL) {
-        goto cleanup;
-    }
-
-    json = cJSON_Print(cjson);
-
-    ret = esp_websocket_client_send_text(
-        rust_was_client_handle(), json, strlen(json), 2000 / portTICK_PERIOD_MS);
-    cJSON_free(json);
-    if (ret < 0) {
-        ESP_LOGE(TAG, "failed to send WAS get_config message");
-    }
-
-cleanup:
-    cJSON_Delete(cjson);
 }
 
 static void send_hello_goodbye(const char *type)

@@ -128,6 +128,18 @@ pub(crate) fn send_endpoint(data: &str) -> Result<usize, EspError> {
     })
 }
 
+pub(crate) fn request_config() -> Result<(), EspError> {
+    if !is_connected(true) {
+        return Ok(());
+    }
+
+    send_text(r#"{"cmd":"get_config"}"#)
+        .map(|_| ())
+        .inspect_err(|_| {
+            error!(target: LOG_TARGET, "failed to send WAS get_config message");
+        })
+}
+
 pub(crate) fn initialize(url: &str) -> Result<(), EspError> {
     if state::is_restarting() {
         return Ok(());
@@ -221,6 +233,12 @@ pub extern "C" fn rust_was_is_connected(wait: bool) -> bool {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_was_notify_mutex() -> SemaphoreHandle_t {
     notification_mutex().unwrap_or(core::ptr::null_mut())
+}
+
+/// Requests configuration after the retained C event handler connects.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_was_request_config() {
+    let _ = request_config();
 }
 
 /// Wraps a WIS response in the WAS endpoint command envelope.

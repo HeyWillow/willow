@@ -40,6 +40,7 @@ esp_websocket_client_handle_t rust_was_client_handle(void);
 esp_err_t rust_was_init(const char *url);
 bool rust_was_is_connected(bool wait);
 SemaphoreHandle_t rust_was_notify_mutex(void);
+void rust_was_request_config(void);
 esp_err_t rust_was_send_endpoint(const char *json);
 void rust_ui_hide_connecting(void);
 void rust_ui_notification_end(void);
