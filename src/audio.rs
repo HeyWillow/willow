@@ -3,6 +3,7 @@
 //! Coordination resources serve the retained C engine while the inactive
 //! capture modules prepare the atomic Rust audio cut-over.
 
+mod board;
 mod capture;
 mod es7210;
 
