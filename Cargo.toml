@@ -62,6 +62,10 @@ component_dirs = [
 ]
 bindings_header = "bindings.h"
 
+[[package.metadata.esp-idf-sys.extra_components]]
+bindings_header = "esp_sr_bindings.h"
+bindings_module = "esp_sr"
+
 [profile.release]
 debug = true
 opt-level = "s"

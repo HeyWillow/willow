@@ -1,3 +1,5 @@
+//! Willow voice-assistant firmware for the ESP32-S3-BOX family.
+
 mod audio;
 mod backlight;
 mod config;
@@ -14,6 +16,7 @@ mod ota;
 #[cfg(esp_idf_willow_debug_runtime_stats)]
 mod runtime_stats;
 mod spiffs;
+mod sr;
 mod state;
 mod system;
 mod ui;
