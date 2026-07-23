@@ -4,16 +4,20 @@ pub(crate) mod ntp;
 #[cfg(not(esp_idf_willow_ethernet))]
 pub(crate) mod wifi;
 
-use core::{ptr, ptr::NonNull};
+use core::{
+    ptr,
+    ptr::NonNull,
+    sync::atomic::{AtomicPtr, Ordering},
+};
 use std::{
     borrow::Cow,
     ffi::{CStr, CString},
 };
 
 use esp_idf_sys::{
-    CONFIG_LWIP_LOCAL_HOSTNAME, ESP_ERR_INVALID_ARG, ESP_OK, EspError, esp_err_t, esp_event_base_t,
-    esp_mac_type_t, esp_mac_type_t_ESP_MAC_ETH, esp_mac_type_t_ESP_MAC_WIFI_STA, esp_netif_init,
-    esp_netif_set_hostname, esp_netif_t, esp_read_mac,
+    CONFIG_LWIP_LOCAL_HOSTNAME, ESP_FAIL, ESP_OK, EspError, esp_err_t, esp_event_base_t,
+    esp_mac_type_t, esp_mac_type_t_ESP_MAC_ETH, esp_mac_type_t_ESP_MAC_WIFI_STA,
+    esp_netif_get_hostname, esp_netif_init, esp_netif_set_hostname, esp_netif_t, esp_read_mac,
 };
 use log::{error, info};
 
@@ -26,6 +30,7 @@ use crate::crypto;
 use esp_idf_sys::vTaskDelay;
 
 const LOG_TARGET: &str = "WILLOW/NETWORK";
+static NETWORK_INTERFACE: AtomicPtr<esp_netif_t> = AtomicPtr::new(ptr::null_mut());
 const NETWORK_MAC_TYPE: esp_mac_type_t = if cfg!(esp_idf_willow_ethernet) {
     esp_mac_type_t_ESP_MAC_ETH
 } else {
@@ -56,7 +61,7 @@ fn fatal_wifi_provisioning(error: nvs::ReadError) -> ! {
 /// missing or invalid Wi-Fi provisioning record displays the fatal NVS screen
 /// and waits indefinitely. ESP-NETIF and Ethernet failures remain fatal to the
 /// caller.
-pub(crate) fn initialize() -> Result<Option<NonNull<esp_netif_t>>, EspError> {
+pub(crate) fn initialize() -> Result<(), EspError> {
     check(unsafe { esp_netif_init() })?;
 
     #[cfg(esp_idf_willow_ethernet)]
@@ -76,7 +81,32 @@ pub(crate) fn initialize() -> Result<Option<NonNull<esp_netif_t>>, EspError> {
     #[cfg(esp_idf_mbedtls_ssl_proto_tls1_3)]
     crypto::initialize();
 
-    Ok(network_interface)
+    NETWORK_INTERFACE.store(
+        network_interface.map_or(ptr::null_mut(), NonNull::as_ptr),
+        Ordering::Release,
+    );
+
+    Ok(())
+}
+
+fn network_interface() -> Option<NonNull<esp_netif_t>> {
+    NonNull::new(NETWORK_INTERFACE.load(Ordering::Acquire))
+}
+
+/// Returns a copy of the initialized network interface's hostname.
+pub(crate) fn hostname() -> Result<String, EspError> {
+    let network_interface =
+        network_interface().ok_or_else(|| EspError::from_infallible::<ESP_FAIL>())?;
+    let mut hostname = ptr::null();
+    check(unsafe { esp_netif_get_hostname(network_interface.as_ptr(), &mut hostname) })?;
+
+    if hostname.is_null() {
+        return Err(EspError::from_infallible::<ESP_FAIL>());
+    }
+
+    Ok(unsafe { CStr::from_ptr(hostname) }
+        .to_string_lossy()
+        .into_owned())
 }
 
 /// Reads and logs the configured transport's ESP-derived MAC address.
@@ -93,30 +123,11 @@ pub(crate) fn log_mac_address() {
     info!(target: LOG_TARGET, "MAC address: {a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}");
 }
 
-/// Compatibility entry point for C-owned WAS initialization.
-///
-/// # Safety
-///
-/// `network_interface` must point to writable storage for an ESP-NETIF
-/// interface pointer.
+/// Compatibility entry point for retained C startup.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_network_init(network_interface: *mut *mut esp_netif_t) -> esp_err_t {
-    let Some(network_interface) = NonNull::new(network_interface) else {
-        error!(target: LOG_TARGET, "network interface output is null");
-        return ESP_ERR_INVALID_ARG;
-    };
-    unsafe {
-        network_interface.as_ptr().write(ptr::null_mut());
-    }
-
+pub extern "C" fn rust_network_init() -> esp_err_t {
     match initialize() {
-        Ok(Some(interface)) => {
-            unsafe {
-                network_interface.as_ptr().write(interface.as_ptr());
-            }
-            ESP_OK
-        }
-        Ok(None) => ESP_OK,
+        Ok(()) => ESP_OK,
         Err(error) => error.code(),
     }
 }

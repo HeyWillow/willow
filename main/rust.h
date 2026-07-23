@@ -5,7 +5,6 @@
 #include <stdint.h>
 
 #include "esp_err.h"
-#include "esp_netif.h"
 #include "esp_websocket_client.h"
 #include "driver/i2c_master.h"
 #include "freertos/queue.h"
@@ -29,11 +28,10 @@ intptr_t rust_config_get_char_len(const char *key);
 int64_t rust_config_get_int(const char *key);
 bool rust_config_is_valid(void);
 bool rust_config_write(const char *data);
-esp_err_t rust_network_init(esp_netif_t **network_interface);
+esp_err_t rust_network_init(void);
 bool rust_nvs_apply(const char *data);
 bool rust_nvs_read_was_url(char *output, size_t output_len);
 bool rust_ota_install(const char *url);
-const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
 void rust_state_mark_restarting(void);
 esp_websocket_client_handle_t rust_was_client_handle(void);
@@ -42,6 +40,8 @@ bool rust_was_is_connected(bool wait);
 SemaphoreHandle_t rust_was_notify_mutex(void);
 void rust_was_request_config(void);
 esp_err_t rust_was_send_endpoint(const char *json);
+void rust_was_send_goodbye(void);
+void rust_was_send_hello(void);
 void rust_was_send_wake_end(void);
 void rust_was_send_wake_start(float wake_volume);
 void rust_ui_hide_connecting(void);

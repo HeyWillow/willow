@@ -1,8 +1,6 @@
 #include "board.h"
 #include "cJSON.h"
 #include "esp_log.h"
-#include "esp_mac.h"
-#include "esp_netif.h"
 #include "esp_transport_ws.h"
 #include "esp_websocket_client.h"
 
@@ -15,8 +13,6 @@
 
 static const char *TAG = "WILLOW/WAS";
 static struct notify_data *notify_active;
-
-esp_netif_t *hdl_netif;
 
 struct notify_data {
     uint64_t id;
@@ -31,7 +27,6 @@ struct notify_data {
 };
 
 static void notify_task(void *data);
-static void send_hello_goodbye(const char *type);
 
 void willow_was_event_handler(
     void *arg_evh, esp_event_base_t base_ev, int32_t id_ev, void *ev_data)
@@ -41,7 +36,7 @@ void willow_was_event_handler(
     switch (id_ev) {
         case WEBSOCKET_EVENT_CONNECTED:
             ESP_LOGI(TAG, "WebSocket connected");
-            send_hello_goodbye("hello");
+            rust_was_send_hello();
             if (!rust_config_is_valid()) {
                 rust_was_request_config();
             }
@@ -286,71 +281,12 @@ void was_deinit_task(void *data)
 void deinit_was(void)
 {
     rust_state_mark_restarting();
-    send_hello_goodbye("goodbye");
+    rust_was_send_goodbye();
     // needs to be done in a task to avoid this error:
     // WEBSOCKET_CLIENT: Client cannot be stopped from websocket task
     xTaskCreate(&was_deinit_task, "was_deinit_task", 4096, NULL, 5, NULL);
     ESP_LOGI(TAG, "Delay for was_deinit_task");
     vTaskDelay(2000 / portTICK_PERIOD_MS);
-}
-
-static void send_hello_goodbye(const char *type)
-{
-    char *json;
-    const char *hostname;
-    uint8_t mac[6];
-    esp_err_t ret;
-
-    ESP_LOGI(TAG, "sending WAS %s", type);
-
-    if (!rust_was_is_connected(true)) {
-        return;
-    }
-
-    ret = esp_netif_get_hostname(hdl_netif, &hostname);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "failed to get hostname");
-        return;
-    }
-
-    ret = esp_efuse_mac_get_default(mac);
-    if (ret != ESP_OK) {
-        ESP_LOGE(TAG, "failed to get MAC address from EFUSE");
-        return;
-    }
-
-    cJSON *cjson = cJSON_CreateObject();
-    cJSON *msg = cJSON_CreateObject();
-    cJSON *mac_arr = cJSON_CreateArray();
-
-    for (int i = 0; i < 6; i++) {
-        cJSON_AddItemToArray(mac_arr, cJSON_CreateNumber(mac[i]));
-    }
-
-    if (cJSON_AddStringToObject(msg, "hostname", hostname) == NULL) {
-        goto cleanup;
-    }
-    if (cJSON_AddStringToObject(msg, "hw_type", rust_system_hardware_name()) == NULL) {
-        goto cleanup;
-    }
-    if (!cJSON_AddItemToObjectCS(msg, "mac_addr", mac_arr)) {
-        goto cleanup;
-    }
-    if (!cJSON_AddItemToObjectCS(cjson, type, msg)) {
-        goto cleanup;
-    }
-
-    json = cJSON_Print(cjson);
-
-    ret = esp_websocket_client_send_text(
-        rust_was_client_handle(), json, strlen(json), 2000 / portTICK_PERIOD_MS);
-    cJSON_free(json);
-    if (ret < 0) {
-        ESP_LOGE(TAG, "failed to send WAS %s message", type);
-    }
-
-cleanup:
-    cJSON_Delete(cjson);
 }
 
 static void notify_task(void *data)

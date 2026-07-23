@@ -19,7 +19,7 @@ void willow_init(void)
 {
     esp_err_t err;
 
-    ESP_ERROR_CHECK(rust_network_init(&hdl_netif));
+    ESP_ERROR_CHECK(rust_network_init());
 
     if (!rust_nvs_read_was_url(was_url, sizeof(was_url))) {
         rust_ui_show_error("Fatal error!", "Failed to read NVS partition.");

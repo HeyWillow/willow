@@ -1,9 +1,9 @@
 //! Wi-Fi initialization and event handling through ESP-IDF.
 //!
-//! Rust reads the provisioned credentials and returns the resulting network
-//! interface to the C-owned WAS code, which still needs its hostname. Driver
-//! setup, event callbacks, hostname setup, SNTP, and connection
-//! synchronization stay entirely in Rust.
+//! Rust reads the provisioned credentials and retains the resulting network
+//! interface for WAS identity messages. Driver setup, event callbacks,
+//! hostname setup, SNTP, and connection synchronization stay entirely in
+//! Rust.
 
 use core::{
     ffi::c_void,
@@ -298,9 +298,8 @@ unsafe extern "C" fn wifi_event_handler(
 
 /// Initializes the station interface and waits until it has an IP address.
 ///
-/// The returned network interface remains owned by ESP-IDF. The caller keeps
-/// the borrowed pointer because the existing WAS hello message reads its
-/// hostname.
+/// The returned network interface remains owned by ESP-IDF. The network module
+/// retains the borrowed pointer so WAS identity messages can read its hostname.
 pub(crate) fn initialize(psk: &str, ssid: &str) -> Result<NonNull<esp_netif_t>, EspError> {
     let event_group = unsafe { xEventGroupCreate() };
     if event_group.is_null() {

@@ -1,7 +1,5 @@
 //! System-level operations shared with the retained C application.
 
-use core::ffi::{CStr, c_char};
-
 use esp_idf_svc::hal::{delay::FreeRtos, reset};
 use esp_idf_sys::esp_random;
 use log::{debug, info};
@@ -38,15 +36,6 @@ impl Hardware {
             Self::Unsupported => "HW-UNSUPPORTED",
         }
     }
-
-    const fn c_name(self) -> &'static CStr {
-        match self {
-            Self::Esp32S3Box => c"ESP32-S3-BOX",
-            Self::Esp32S3Box3 => c"ESP32-S3-BOX-3",
-            Self::Esp32S3BoxLite => c"ESP32-S3-BOX-Lite",
-            Self::Unsupported => c"HW-UNSUPPORTED",
-        }
-    }
 }
 
 pub(crate) const fn hardware() -> Hardware {
@@ -78,10 +67,4 @@ pub(crate) fn restart_delayed() -> ! {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_system_restart_delayed() {
     restart_delayed()
-}
-
-/// Returns the hardware name on behalf of callers not yet migrated from C.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_system_hardware_name() -> *const c_char {
-    hardware().c_name().as_ptr()
 }

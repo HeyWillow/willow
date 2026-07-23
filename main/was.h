@@ -1,7 +1,4 @@
 #include "esp_event.h"
-#include "esp_netif_types.h"
-
-extern esp_netif_t *hdl_netif;
 extern char was_url[2048];
 
 void deinit_was(void);

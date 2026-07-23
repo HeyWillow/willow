@@ -14,8 +14,8 @@ use std::{
 use esp_idf_svc::hal::delay::TickType;
 use esp_idf_sys::{
     ESP_ERR_INVALID_ARG, ESP_ERR_NO_MEM, ESP_FAIL, ESP_OK, EspError, SemaphoreHandle_t,
-    WAS_RECONNECT_TIMEOUT_MS, WILLOW_QUEUE_TYPE_MUTEX, esp_err_t, esp_event_base_t,
-    esp_log_level_set, esp_log_level_t_ESP_LOG_DEBUG, esp_websocket_client,
+    WAS_RECONNECT_TIMEOUT_MS, WILLOW_QUEUE_TYPE_MUTEX, esp_efuse_mac_get_default, esp_err_t,
+    esp_event_base_t, esp_log_level_set, esp_log_level_t_ESP_LOG_DEBUG, esp_websocket_client,
     esp_websocket_client_config_t, esp_websocket_client_destroy_on_exit,
     esp_websocket_client_handle_t, esp_websocket_client_init, esp_websocket_client_is_connected,
     esp_websocket_client_send_text, esp_websocket_client_start,
@@ -24,9 +24,9 @@ use esp_idf_sys::{
 use log::{error, info, warn};
 use serde_json::Value;
 
-use crate::{config, state, ui};
+use crate::{config, net, state, system, ui};
 
-use self::protocol::{Command, Event};
+use self::protocol::{Command, DeviceIdentity, Event};
 
 const LOG_TARGET: &str = "WILLOW/WAS";
 const USER_AGENT: &str = concat!("Willow/", env!("WILLOW_VERSION"));
@@ -146,6 +146,64 @@ fn multiwake_enabled() -> bool {
     config::config()
         .and_then(|config| config.multiwake)
         .unwrap_or(false)
+}
+
+#[derive(Clone, Copy)]
+enum ConnectionAnnouncement {
+    Goodbye,
+    Hello,
+}
+
+impl ConnectionAnnouncement {
+    const fn name(self) -> &'static str {
+        match self {
+            Self::Goodbye => "goodbye",
+            Self::Hello => "hello",
+        }
+    }
+
+    fn event(self, identity: DeviceIdentity) -> Event {
+        match self {
+            Self::Goodbye => Event::Goodbye(identity),
+            Self::Hello => Event::Hello(identity),
+        }
+    }
+}
+
+fn send_connection_announcement(announcement: ConnectionAnnouncement) -> Result<(), EspError> {
+    let name = announcement.name();
+    info!(target: LOG_TARGET, "sending WAS {name}");
+
+    if !is_connected(true) {
+        return Ok(());
+    }
+
+    let hostname = net::hostname().inspect_err(|_| {
+        error!(target: LOG_TARGET, "failed to get hostname");
+    })?;
+
+    let mut mac_addr = [0; 6];
+    if let Some(error) = EspError::from(unsafe { esp_efuse_mac_get_default(mac_addr.as_mut_ptr()) })
+    {
+        error!(target: LOG_TARGET, "failed to get MAC address from EFUSE");
+        return Err(error);
+    }
+
+    let identity = DeviceIdentity::new(hostname, system::hardware().name(), mac_addr);
+    let message = serde_json::to_string(&announcement.event(identity))
+        .map_err(|_| EspError::from_infallible::<ESP_FAIL>())?;
+
+    send_text(&message).map(|_| ()).inspect_err(|_| {
+        error!(target: LOG_TARGET, "failed to send WAS {name} message");
+    })
+}
+
+pub(crate) fn send_goodbye() -> Result<(), EspError> {
+    send_connection_announcement(ConnectionAnnouncement::Goodbye)
+}
+
+pub(crate) fn send_hello() -> Result<(), EspError> {
+    send_connection_announcement(ConnectionAnnouncement::Hello)
 }
 
 pub(crate) fn send_wake_end() -> Result<(), EspError> {
@@ -317,4 +375,16 @@ pub extern "C" fn rust_was_send_wake_end() {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_was_send_wake_start(wake_volume: f32) {
     let _ = send_wake_start(wake_volume);
+}
+
+/// Sends the device identity after the retained C event handler connects.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_was_send_hello() {
+    let _ = send_hello();
+}
+
+/// Sends the device identity before retained C teardown closes the connection.
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_was_send_goodbye() {
+    let _ = send_goodbye();
 }

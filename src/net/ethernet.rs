@@ -203,9 +203,9 @@ unsafe extern "C" fn ip_event_handler(
 
 /// Initializes Willow's fixed W5500 Ethernet hardware.
 ///
-/// The default event loop is already owned by Rust and C initializes the
-/// TCP/IP stack immediately before calling the temporary compatibility entry
-/// point. All calls from this point are directly to ESP-IDF.
+/// The default event loop is already owned by Rust and the parent network
+/// module initializes the TCP/IP stack before this transport. All calls from
+/// this point are directly to ESP-IDF.
 pub(crate) fn initialize() -> Result<NonNull<esp_netif_t>, EspError> {
     // Keep SNTP initialization before connecting so DHCP can supply a server.
     let _ = ntp::initialize(ip_event_t_IP_EVENT_ETH_GOT_IP);
