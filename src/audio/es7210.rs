@@ -169,6 +169,25 @@ impl Es7210 {
         Ok(snapshot)
     }
 
+    /// Applies Willow's configured ES7210 gain code and verifies every
+    /// selected microphone register.
+    pub(super) fn set_gain(&mut self, gain: u8) -> Result<(), CodecError> {
+        let gain = gain.min(BOX3_GAIN_CODE);
+        self.set_selected_gain(gain)?;
+        for register in [MIC1_GAIN, MIC2_GAIN, MIC3_GAIN] {
+            let actual = self.read(register)?;
+            if actual & 0x0f != gain {
+                return Err(CodecError::Readback {
+                    register,
+                    mask: 0x0f,
+                    expected: gain,
+                    actual,
+                });
+            }
+        }
+        Ok(())
+    }
+
     fn configure_16khz(&mut self) -> Result<(), CodecError> {
         self.write(MAIN_CLOCK, 0xc1)?;
         self.write(OSR, 0x20)?;

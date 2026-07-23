@@ -6,6 +6,7 @@
 mod board;
 mod capture;
 mod codec_ffi;
+mod codecs;
 mod es7210;
 
 use core::{ffi::c_void, ptr::NonNull};

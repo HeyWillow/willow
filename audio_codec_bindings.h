@@ -1,5 +1,11 @@
 #pragma once
 
+#include "sdkconfig.h"
+
+#if CONFIG_CODEC_I2C_BACKWARD_COMPATIBLE
+#error "Willow codec devices require the native I2C master driver"
+#endif
+
 #include "esp_codec_dev.h"
 #include "esp_codec_dev_defaults.h"
 #include "es7210_adc.h"
