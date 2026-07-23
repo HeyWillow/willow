@@ -6,6 +6,8 @@ use esp_idf_svc::hal::task::queue::Queue;
 use esp_idf_sys::{ESP_ERR_INVALID_STATE, ESP_ERR_NO_MEM, EspError, QueueHandle_t};
 
 const RECORDER_QUEUE_CAPACITY: usize = 3;
+// MSG_STOP is the first variant of the retained C q_msg enum.
+const RECORDER_STOP_EVENT: i32 = 0;
 
 static RECORDER_QUEUE: OnceLock<Queue<i32>> = OnceLock::new();
 
@@ -30,6 +32,11 @@ pub(crate) fn send_recorder_event(event: i32, timeout: u32) -> Result<(), EspErr
         .get()
         .ok_or_else(EspError::from_infallible::<ESP_ERR_INVALID_STATE>)?;
     recorder_queue.send_back(event, timeout).map(|_| ())
+}
+
+/// Queues a recorder stop without blocking when the queue is full.
+pub(crate) fn send_stop_event() -> Result<(), EspError> {
+    send_recorder_event(RECORDER_STOP_EVENT, 0)
 }
 
 /// Returns the Rust-owned recorder queue as a borrowed FreeRTOS handle.

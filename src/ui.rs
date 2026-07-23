@@ -887,7 +887,7 @@ fn point_in_cancel(point: Point) -> bool {
         && point.y < CANCEL_Y + CANCEL_HEIGHT as i32
 }
 
-fn cancel(state: &Arc<Mutex<UiState>>, stop_event: i32) {
+fn cancel(state: &Arc<Mutex<UiState>>) {
     let (action, player) = {
         let state = state.lock().unwrap_or_else(PoisonError::into_inner);
         (state.cancel_action, state.notification_player)
@@ -896,7 +896,7 @@ fn cancel(state: &Arc<Mutex<UiState>>, stop_event: i32) {
     match action {
         CancelAction::None => {}
         CancelAction::Recording => {
-            if let Err(error) = crate::audio::send_recorder_event(stop_event, 0) {
+            if let Err(error) = crate::audio::send_stop_event() {
                 error!(target: LOG_TARGET, "failed to send recorder stop event: {error}");
             }
         }
@@ -920,11 +920,7 @@ fn cancel(state: &Arc<Mutex<UiState>>, stop_event: i32) {
     }
 }
 
-fn touch_worker(
-    state: Arc<Mutex<UiState>>,
-    stop_event: i32,
-    started: SyncSender<Result<(), EspError>>,
-) {
+fn touch_worker(state: Arc<Mutex<UiState>>, started: SyncSender<Result<(), EspError>>) {
     let touch = match Touch::new() {
         Ok(Some(touch)) => touch,
         Ok(None) => {
@@ -947,7 +943,7 @@ fn touch_worker(
             crate::backlight::set(true, false);
             if point.is_some_and(point_in_cancel) {
                 debug!(target: LOG_TARGET, "cancel button pressed");
-                cancel(&state, stop_event);
+                cancel(&state);
             }
         } else if !is_pressed && was_pressed {
             let _ = crate::backlight::reset_display_timer(false);
@@ -989,7 +985,7 @@ pub(crate) fn initialize() -> Result<(), EspError> {
     Ok(())
 }
 
-fn start_touch(stop_event: i32) -> Result<(), EspError> {
+pub(crate) fn initialize_touch() -> Result<(), EspError> {
     if cfg!(esp_idf_esp32_s3_box_lite_board) {
         info!(target: LOG_TARGET, "ESP32-S3-BOX-Lite has no touch controller");
         return Ok(());
@@ -1005,7 +1001,7 @@ fn start_touch(stop_event: i32) -> Result<(), EspError> {
     let thread = thread::Builder::new()
         .name("ui_touch".into())
         .stack_size(TOUCH_STACK_SIZE)
-        .spawn(move || touch_worker(state, stop_event, started))
+        .spawn(move || touch_worker(state, started))
         .map_err(|error| {
             error!(target: LOG_TARGET, "failed to start UI touch task: {error}");
             EspError::from_infallible::<ESP_FAIL>()
@@ -1143,14 +1139,6 @@ unsafe fn text<'a>(pointer: *const c_char) -> Option<Cow<'a, str>> {
         None
     } else {
         Some(unsafe { CStr::from_ptr(pointer) }.to_string_lossy())
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_ui_touch_init(stop_event: i32) -> esp_err_t {
-    match start_touch(stop_event) {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
     }
 }
 

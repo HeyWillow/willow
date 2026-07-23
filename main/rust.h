@@ -32,7 +32,6 @@ const char *rust_system_hardware_name(void);
 void rust_system_restart_delayed(void);
 bool rust_state_is_restarting(void);
 void rust_state_mark_restarting(void);
-esp_err_t rust_ui_touch_init(int32_t stop_event);
 void rust_ui_hide_connecting(void);
 void rust_ui_notification_end(void);
 bool rust_ui_notification_cancelled(void);

@@ -71,6 +71,9 @@ fn main() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
     ffi::init();
+    if let Err(error) = ui::initialize_touch() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize UI touch: {error}");
+    }
     net::log_mac_address();
 
     log::info!(
