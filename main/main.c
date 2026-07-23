@@ -95,6 +95,7 @@ void app_main(void)
     }
 
     nvs_handle_t hdl_nvs;
+    size_t sz;
 
 #ifdef CONFIG_WILLOW_ETHERNET
     init_ethernet();
@@ -106,7 +107,7 @@ void app_main(void)
     }
 
     char psk[64];
-    size_t sz = sizeof(psk);
+    sz = sizeof(psk);
     err = nvs_get_str(hdl_nvs, "PSK", psk, &sz);
     if (err != ESP_OK) {
         ESP_LOGE(TAG, "failed to get PSK from NVS namespace WIFI: %s", esp_err_to_name(err));
