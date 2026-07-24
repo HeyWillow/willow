@@ -16,6 +16,7 @@ mod ogg_headers;
 mod pcm;
 mod playback;
 mod player;
+mod recorder_state;
 mod response;
 mod response_config;
 mod spiffs_playback;
