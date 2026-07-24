@@ -16,7 +16,8 @@ use esp_idf_svc::{
     nvs::{EspDefaultNvs, EspDefaultNvsPartition, EspNvs},
 };
 use esp_idf_sys::{
-    ESP_ERR_NVS_NO_FREE_PAGES, EspError, esp_err_t, nvs_commit, nvs_flash_erase, nvs_set_str,
+    ESP_ERR_INVALID_STATE, ESP_ERR_NVS_NO_FREE_PAGES, EspError, esp_err_t, nvs_commit,
+    nvs_flash_erase, nvs_set_str,
 };
 use willow_schema::nvs::v1::{Config, Was};
 
@@ -113,11 +114,11 @@ impl From<EspError> for ReadError {
     }
 }
 
-fn default_partition() -> EspDefaultNvsPartition {
+fn default_partition() -> Result<EspDefaultNvsPartition, EspError> {
     DEFAULT_PARTITION
         .get()
-        .expect("default NVS partition must be initialized before use")
-        .clone()
+        .cloned()
+        .ok_or_else(EspError::from_infallible::<ESP_ERR_INVALID_STATE>)
 }
 
 fn read_string<const LENGTH: usize>(
@@ -134,7 +135,7 @@ fn read_string<const LENGTH: usize>(
 }
 
 pub(crate) fn read_was() -> Result<Was, ReadError> {
-    let namespace = EspNvs::new(default_partition(), "WAS", false)?;
+    let namespace = EspNvs::new(default_partition()?, "WAS", false)?;
     let url = read_string::<2048>(&namespace, "WAS/URL", "URL")?;
 
     Ok(Was { url })
@@ -142,7 +143,7 @@ pub(crate) fn read_was() -> Result<Was, ReadError> {
 
 #[cfg(not(esp_idf_willow_ethernet))]
 pub(crate) fn read_wifi() -> Result<Wifi, ReadError> {
-    let namespace = EspNvs::new(default_partition(), "WIFI", false)?;
+    let namespace = EspNvs::new(default_partition()?, "WIFI", false)?;
     let psk = read_string::<64>(&namespace, "WIFI/PSK", "PSK")?;
     let ssid = read_string::<33>(&namespace, "WIFI/SSID", "SSID")?;
 
@@ -162,7 +163,7 @@ pub(crate) fn apply_document(data: &[u8]) -> Result<(), ApplyError> {
     let wifi_psk = nvs_string("Wi-Fi PSK", config.wifi.psk.as_str())?;
     let wifi_ssid = nvs_string("Wi-Fi SSID", config.wifi.ssid.as_str())?;
 
-    let partition = default_partition();
+    let partition = default_partition()?;
 
     let was = EspNvs::new(partition.clone(), "WAS", true)?;
     let mut was_batch = NvsBatch::new(&was);
@@ -192,10 +193,9 @@ pub(crate) fn initialize() -> Result<(), EspError> {
         }
         Err(error) => return Err(error),
     };
-    assert!(
-        DEFAULT_PARTITION.set(partition).is_ok(),
-        "default NVS partition initialized more than once"
-    );
+    DEFAULT_PARTITION
+        .set(partition)
+        .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_STATE>())?;
 
     Ok(())
 }

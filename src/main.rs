@@ -26,19 +26,34 @@ use esp_idf_svc::hal::delay::FreeRtos;
 
 const MAIN_LOOP_INTERVAL_MS: u32 = 5_000;
 
+fn take_system_event_loop() -> EspSystemEventLoop {
+    match EspSystemEventLoop::take() {
+        Ok(event_loop) => event_loop,
+        Err(error) => {
+            log::error!(
+                target: "WILLOW/MAIN",
+                "failed to initialize default event loop: {error:#?}"
+            );
+            unsafe { esp_idf_sys::esp_system_abort(c"Event-loop initialization failed".as_ptr()) }
+        }
+    }
+}
+
 fn main() {
     esp_idf_sys::link_patches();
     let log_filter = logging::initialize();
 
     log::info!(target: "WILLOW/RUST", "entered Rust main()");
 
-    logging::apply_policy(log_filter).expect("failed to configure logging");
+    if let Err(error) = logging::apply_policy(log_filter) {
+        log::error!(target: "WILLOW/MAIN", "failed to configure logging: {error:#?}");
+        unsafe { esp_idf_sys::esp_system_abort(c"Logging initialization failed".as_ptr()) }
+    }
     log::info!(target: "WILLOW/MAIN", "Starting up! Please wait...");
 
     // Dropping this handle deletes the default event loop. Keep it in Rust's
     // non-returning main function so it remains available to every subsystem.
-    let _system_event_loop =
-        EspSystemEventLoop::take().expect("failed to initialize default event loop");
+    let _system_event_loop = take_system_event_loop();
     system::log_hardware();
 
     match spiffs::mount() {

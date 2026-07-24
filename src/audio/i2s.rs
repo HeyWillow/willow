@@ -19,8 +19,8 @@ use log::error;
 
 use super::{board, capture};
 
-// The PoC doubled ADF's three descriptors because capture, AFE feed, and AFE
-// fetch run sequentially. This preserves 117 ms of measured-format headroom.
+// Six descriptors preserve 117 ms of measured-format headroom while capture,
+// AFE feed, and AFE fetch run sequentially.
 const DMA_DESCRIPTOR_COUNT: u32 = 6;
 const DMA_FRAMES_PER_DESCRIPTOR: u32 = 312;
 const LOG_TARGET: &str = "WILLOW/AUDIO";

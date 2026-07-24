@@ -1,9 +1,8 @@
 //! W5500 Ethernet initialization and event handling through ESP-IDF.
 //!
 //! The network interface, driver, MAC, PHY, and SPI bus remain live for the
-//! firmware lifetime, matching the previous C implementation. Rust registers
-//! callbacks directly with the system event loop owned by Rust; no callback
-//! crosses back into Willow's C implementation.
+//! firmware lifetime. Event callbacks run directly through the Rust-owned
+//! system event loop.
 
 use core::{ffi::c_void, net::Ipv4Addr, ptr, ptr::NonNull};
 

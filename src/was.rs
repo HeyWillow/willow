@@ -178,7 +178,7 @@ fn send_text(message: &str) -> Result<usize, EspError> {
     if sent < 0 {
         Err(EspError::from_infallible::<ESP_FAIL>())
     } else {
-        Ok(sent as usize)
+        usize::try_from(sent).map_err(|_| EspError::from_infallible::<ESP_FAIL>())
     }
 }
 
@@ -699,6 +699,7 @@ pub(crate) fn deinitialize() {
 
     // The client cannot be stopped from its event-handler task. Preserve the
     // old unpinned FreeRTOS task, including its stack size and priority.
+    let affinity = i32::try_from(CONFIG_FREERTOS_NO_AFFINITY).unwrap_or(-1);
     let _ = unsafe {
         xTaskCreatePinnedToCore(
             Some(deinit_task),
@@ -707,7 +708,7 @@ pub(crate) fn deinitialize() {
             core::ptr::null_mut(),
             DEINIT_TASK_PRIORITY,
             core::ptr::null_mut(),
-            CONFIG_FREERTOS_NO_AFFINITY as i32,
+            affinity,
         )
     };
 
@@ -779,7 +780,7 @@ fn initialize_client(url: &CStr) -> Result<(), EspError> {
         ..Default::default()
     };
 
-    let client = unsafe { esp_websocket_client_init(&config) };
+    let client = unsafe { esp_websocket_client_init(&raw const config) };
     if client.is_null() {
         return Err(EspError::from_infallible::<ESP_ERR_NO_MEM>());
     }

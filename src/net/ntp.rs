@@ -31,7 +31,16 @@ unsafe extern "C" fn synchronization_callback(time: *mut timeval) {
         return;
     };
 
-    for index in 0..CONFIG_LWIP_SNTP_MAX_SERVERS as u8 {
+    let Ok(server_count) = u8::try_from(CONFIG_LWIP_SNTP_MAX_SERVERS) else {
+        error!(target: LOG_TARGET, "SNTP server count exceeds the ESP-IDF API limit");
+        return;
+    };
+    let Ok(buffer_length) = i32::try_from(INET6_ADDRSTRLEN) else {
+        error!(target: LOG_TARGET, "SNTP address buffer exceeds the ESP-IDF API limit");
+        return;
+    };
+
+    for index in 0..server_count {
         let server_name = unsafe { esp_sntp_getservername(index) };
         if !server_name.is_null() {
             let server_name = unsafe { CStr::from_ptr(server_name) }.to_string_lossy();
@@ -50,7 +59,7 @@ unsafe extern "C" fn synchronization_callback(time: *mut timeval) {
 
         let mut buffer = [0 as c_char; INET6_ADDRSTRLEN];
         let formatted =
-            unsafe { ipaddr_ntoa_r(server_address, buffer.as_mut_ptr(), INET6_ADDRSTRLEN as i32) };
+            unsafe { ipaddr_ntoa_r(server_address, buffer.as_mut_ptr(), buffer_length) };
         if !formatted.is_null() {
             let server_address = unsafe { CStr::from_ptr(formatted) }.to_string_lossy();
             info!(

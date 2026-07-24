@@ -14,7 +14,7 @@ use esp_idf_svc::hal::{
     delay::FreeRtos,
     gpio::{AnyInputPin, Input, PinDriver, Pull},
 };
-use esp_idf_sys::{ESP_ERR_INVALID_STATE, EspError, gpio_num_t_GPIO_NUM_1};
+use esp_idf_sys::{ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, EspError, gpio_num_t_GPIO_NUM_1};
 use log::{debug, error, info};
 
 const INPUT_MONITOR_STACK_SIZE: usize = 3_072;
@@ -49,9 +49,10 @@ pub fn init() -> Result<(), EspError> {
 
     debug!(target: LOG_TARGET, "initializing mute input on GPIO1 in Rust");
 
-    // GPIO1 is not represented elsewhere in Rust and the old ADF button
-    // peripheral is removed by this migration, so this becomes its sole owner.
-    let pin = unsafe { AnyInputPin::steal(gpio_num_t_GPIO_NUM_1 as u8) };
+    // No other subsystem represents GPIO1, so this driver is its sole owner.
+    let gpio = u8::try_from(gpio_num_t_GPIO_NUM_1)
+        .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
+    let pin = unsafe { AnyInputPin::steal(gpio) };
     let input = PinDriver::input(pin, Pull::Up)?;
 
     MUTE_INPUT

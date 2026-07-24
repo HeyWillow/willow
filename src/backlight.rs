@@ -1,4 +1,4 @@
-//! LCD backlight PWM, strobe, and timeout ownership with a temporary C API.
+//! LCD backlight PWM, strobe, and display-timeout ownership.
 
 use std::{
     sync::{
@@ -104,8 +104,7 @@ pub(crate) fn initialize() -> Result<(), EspError> {
 
     let brightness = crate::config::config()
         .and_then(|configuration| configuration.lcd_brightness)
-        .map(u32::from)
-        .unwrap_or(DEFAULT_BRIGHTNESS);
+        .map_or(DEFAULT_BRIGHTNESS, u32::from);
     let backlight = duties(brightness)?;
 
     debug!(
@@ -125,7 +124,7 @@ pub(crate) fn initialize() -> Result<(), EspError> {
         deconfigure: false,
     };
     check(
-        unsafe { ledc_timer_config(&timer_configuration) },
+        unsafe { ledc_timer_config(&raw const timer_configuration) },
         "failed to configure LEDC timer for display backlight",
     )?;
 
@@ -140,7 +139,7 @@ pub(crate) fn initialize() -> Result<(), EspError> {
         ..Default::default()
     };
     check(
-        unsafe { ledc_channel_config(&channel_configuration) },
+        unsafe { ledc_channel_config(&raw const channel_configuration) },
         "failed to configure LEDC channel for display backlight",
     )?;
     check(
@@ -281,6 +280,10 @@ pub(crate) fn set(on: bool, maximum: bool) {
     );
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "the worker owns the receiver for its full lifetime"
+)]
 fn strobe(period: Duration, stop: Receiver<()>) {
     info!(
         target: LOG_TARGET,

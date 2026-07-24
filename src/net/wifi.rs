@@ -5,6 +5,11 @@
 //! hostname setup, SNTP, and connection synchronization stay entirely in
 //! Rust.
 
+#![allow(
+    clippy::cast_possible_wrap,
+    reason = "bindgen types nonnegative ESP-IDF C configuration macros as u32 while their struct fields and event APIs use i32"
+)]
+
 use core::{
     ffi::c_void,
     net::Ipv4Addr,
@@ -38,7 +43,7 @@ use log::{error, info};
 
 use crate::{state, ui};
 
-use super::{log_unhandled, ntp, set_hostname};
+use super::{MacAddress, log_unhandled, ntp, set_hostname};
 
 const LOG_TARGET: &str = "WILLOW/NETWORK";
 const WIFI_BIT_CONNECTED: u32 = 1;
@@ -246,7 +251,12 @@ unsafe extern "C" fn wifi_event_handler(
     event_id: i32,
     event_data: *mut c_void,
 ) {
-    match event_id as u32 {
+    let Ok(wifi_event_id) = u32::try_from(event_id) else {
+        log_unhandled(event_base, event_id);
+        return;
+    };
+
+    match wifi_event_id {
         WIFI_EVENT_STA_CONNECTED => {
             let Some(event) = (unsafe { event_data.cast::<wifi_event_sta_connected_t>().as_ref() })
             else {
@@ -254,11 +264,11 @@ unsafe extern "C" fn wifi_event_handler(
                 return;
             };
 
-            let [a, b, c, d, e, f] = event.bssid;
             let ssid = ssid(&event.ssid, event.ssid_len);
             info!(
                 target: LOG_TARGET,
-                "connected to AP (BSSID='{a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}' SSID='{ssid}' channel='{}')",
+                "connected to AP (BSSID='{}' SSID='{ssid}' channel='{}')",
+                MacAddress(event.bssid),
                 event.channel
             );
         }
@@ -270,12 +280,12 @@ unsafe extern "C" fn wifi_event_handler(
                 return;
             };
 
-            let [a, b, c, d, e, f] = event.bssid;
             let ssid = ssid(&event.ssid, event.ssid_len);
             let reason_name = disconnect_reason_name(event.reason);
             info!(
                 target: LOG_TARGET,
-                "disconnected from AP (BSSID='{a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}' SSID='{ssid}' reason='{reason_name} ({})' rssi='{}')",
+                "disconnected from AP (BSSID='{}' SSID='{ssid}' reason='{reason_name} ({})' rssi='{}')",
+                MacAddress(event.bssid),
                 event.reason,
                 event.rssi
             );

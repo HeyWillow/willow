@@ -1,11 +1,11 @@
-//! Pure timing state for the legacy ADF recorder lifecycle.
+//! Pure timing state for Willow's deployed recorder lifecycle.
 
 use core::time::Duration;
 
 const NO_SPEECH_TIMEOUT: Duration = Duration::from_secs(10);
 const SPEECH_CONFIRMATION: Duration = Duration::from_millis(160);
 
-// Willow explicitly overrides ADF's 900 ms default with one millisecond.
+// Willow's deployed recorder uses a one-millisecond wake-end timeout.
 const WAKE_END_TIMEOUT: Duration = Duration::from_millis(1);
 
 /// Recorder lifecycle changes produced after debouncing VAD transitions.
@@ -27,7 +27,7 @@ enum TimingState {
     Wakeup,
 }
 
-/// Reproduces ADF's recorder timers without owning any hardware or threads.
+/// Reproduces the deployed recorder timers without owning hardware or threads.
 pub(super) struct RecorderTiming {
     silence_confirmation: Duration,
     state: TimingState,
@@ -47,7 +47,7 @@ impl RecorderTiming {
 
     /// Starts or restarts the wake lifecycle at `now`.
     ///
-    /// ADF resets its internal state when another wake word arrives before the
+    /// The deployed recorder resets when another wake word arrives before the
     /// preceding lifecycle ends, without emitting terminal events for the old
     /// lifecycle. Retaining that behavior lets an active upload continue while
     /// the new wake detection restarts the no-speech window.
@@ -77,7 +77,7 @@ impl RecorderTiming {
         };
     }
 
-    /// Emits a lifecycle event when the next ADF-compatible deadline expires.
+    /// Emits a lifecycle event when the next compatible deadline expires.
     pub(super) fn tick(&mut self, now: Duration) -> Option<TimingEvent> {
         let wake_due = self
             .wake_deadline
@@ -225,7 +225,7 @@ mod tests {
     }
 
     #[test]
-    fn another_wake_restarts_the_adf_lifecycle_without_terminal_events() {
+    fn another_wake_restarts_the_lifecycle_without_terminal_events() {
         let mut timing = super::RecorderTiming::new(SILENCE);
         timing.wake(Duration::ZERO);
         timing.vad_changed(true, Duration::ZERO);

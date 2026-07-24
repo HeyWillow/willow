@@ -42,13 +42,13 @@ impl fmt::Display for CaptureFramingError {
     }
 }
 
-/// Reproduces the current ADF channel order for migration parity.
+/// Reproduces Willow's deployed legacy AFE channel order.
 ///
 /// The output is `[mic0, mic1, slot0_low]`. Hardware inspection established
 /// that `slot0_low` is ADC low-bit residue, not the MIC3 playback reference.
 /// It remains here only because the active ESP-SR configuration declares the
-/// same three logical lanes as the C implementation. Replacing it with a real
-/// reference requires a separately validated 16-bit TDM capture format.
+/// same three logical lanes as the deployed configuration. Replacing it with a
+/// real reference requires a separately validated 16-bit TDM capture format.
 pub(super) fn extract_legacy_afe_inputs(
     raw: &[u8],
     output: &mut [i16],
@@ -91,7 +91,7 @@ impl std::error::Error for CaptureFramingError {}
 )]
 mod tests {
     #[test]
-    fn legacy_afe_order_matches_the_adf_s3_mapping() {
+    fn legacy_afe_order_matches_the_deployed_s3_mapping() {
         let raw = [
             0x22, 0x11, 0x44, 0x33, 0x66, 0x55, 0x88, 0x77, 0xaa, 0x99, 0xcc, 0xbb, 0xee, 0xdd,
             0x00, 0xff,

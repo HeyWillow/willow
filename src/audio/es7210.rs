@@ -201,7 +201,7 @@ impl Es7210 {
         // MIC1/MIC2 are the two physical microphone capsules. MIC3 is the
         // schematic's ES8311 DAC loopback for future AEC, not another mic.
         // Keep it selected only to preserve Willow's known-working register
-        // sequence and serialization mode during this migration. The validated
+        // sequence and serialization mode. The validated
         // 32-bit capture exposes only the two microphone words; it must not
         // label either low halfword as a MIC3/reference sample.
         for register in MIC1_GAIN..=MIC4_GAIN {

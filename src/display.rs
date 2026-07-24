@@ -7,15 +7,15 @@ use core::ptr;
 use std::sync::OnceLock;
 
 use esp_idf_sys::{
-    ESP_ERR_INVALID_STATE, EspError, esp_err_t, esp_lcd_new_panel_io_spi, esp_lcd_new_panel_st7789,
-    esp_lcd_panel_del, esp_lcd_panel_dev_config_t, esp_lcd_panel_disp_on_off,
-    esp_lcd_panel_handle_t, esp_lcd_panel_init, esp_lcd_panel_invert_color, esp_lcd_panel_io_del,
-    esp_lcd_panel_io_handle_t, esp_lcd_panel_io_spi_config_t, esp_lcd_panel_mirror,
-    esp_lcd_panel_reset, esp_lcd_panel_set_gap, esp_lcd_panel_swap_xy, esp_lcd_spi_bus_handle_t,
-    gpio_config, gpio_config_t, gpio_mode_t_GPIO_MODE_OUTPUT, gpio_num_t_GPIO_NUM_4,
-    gpio_num_t_GPIO_NUM_5, gpio_num_t_GPIO_NUM_6, gpio_num_t_GPIO_NUM_7, gpio_num_t_GPIO_NUM_45,
-    gpio_num_t_GPIO_NUM_47, gpio_num_t_GPIO_NUM_48,
-    lcd_rgb_element_order_t_LCD_RGB_ELEMENT_ORDER_BGR,
+    ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, EspError, esp_err_t, esp_lcd_new_panel_io_spi,
+    esp_lcd_new_panel_st7789, esp_lcd_panel_del, esp_lcd_panel_dev_config_t,
+    esp_lcd_panel_disp_on_off, esp_lcd_panel_handle_t, esp_lcd_panel_init,
+    esp_lcd_panel_invert_color, esp_lcd_panel_io_del, esp_lcd_panel_io_handle_t,
+    esp_lcd_panel_io_spi_config_t, esp_lcd_panel_mirror, esp_lcd_panel_reset,
+    esp_lcd_panel_set_gap, esp_lcd_panel_swap_xy, esp_lcd_spi_bus_handle_t, gpio_config,
+    gpio_config_t, gpio_mode_t_GPIO_MODE_OUTPUT, gpio_num_t_GPIO_NUM_4, gpio_num_t_GPIO_NUM_5,
+    gpio_num_t_GPIO_NUM_6, gpio_num_t_GPIO_NUM_7, gpio_num_t_GPIO_NUM_45, gpio_num_t_GPIO_NUM_47,
+    gpio_num_t_GPIO_NUM_48, lcd_rgb_element_order_t_LCD_RGB_ELEMENT_ORDER_BGR,
     lcd_rgb_element_order_t_LCD_RGB_ELEMENT_ORDER_RGB, spi_bus_config_t, spi_bus_free,
     spi_bus_initialize, spi_common_dma_t_SPI_DMA_CH_AUTO, spi_host_device_t_SPI2_HOST,
 };
@@ -31,6 +31,10 @@ const TRANSACTION_QUEUE_DEPTH: usize = 10;
 const VERTICAL_RESOLUTION: i32 = 240;
 
 #[derive(Clone, Copy)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "these independent flags directly describe fixed panel wiring"
+)]
 struct BoardConfiguration {
     backlight_gpio: i32,
     backlight_on_level: u32,
@@ -124,7 +128,7 @@ fn initialize_backlight_gpio() -> Result<(), EspError> {
         ..Default::default()
     };
     check(
-        unsafe { gpio_config(&configuration) },
+        unsafe { gpio_config(&raw const configuration) },
         "failed to configure initial backlight GPIO",
     )?;
     check(
@@ -186,7 +190,7 @@ pub(crate) fn initialize() -> Result<(), EspError> {
         unsafe {
             spi_bus_initialize(
                 spi_host_device_t_SPI2_HOST,
-                &bus_configuration,
+                &raw const bus_configuration,
                 spi_common_dma_t_SPI_DMA_CH_AUTO,
             )
         },
@@ -196,14 +200,10 @@ pub(crate) fn initialize() -> Result<(), EspError> {
     let mut display = Display { io: 0, panel: 0 };
     let io_configuration = panel_io_configuration();
     let mut io = ptr::null_mut();
+    let bus_handle: esp_lcd_spi_bus_handle_t = i32::try_from(spi_host_device_t_SPI2_HOST)
+        .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
     check(
-        unsafe {
-            esp_lcd_new_panel_io_spi(
-                spi_host_device_t_SPI2_HOST as esp_lcd_spi_bus_handle_t,
-                &io_configuration,
-                &mut io,
-            )
-        },
+        unsafe { esp_lcd_new_panel_io_spi(bus_handle, &raw const io_configuration, &raw mut io) },
         "failed to create display panel IO",
     )?;
     display.io = io as usize;
@@ -211,7 +211,7 @@ pub(crate) fn initialize() -> Result<(), EspError> {
     let panel_configuration = panel_configuration();
     let mut panel = ptr::null_mut();
     check(
-        unsafe { esp_lcd_new_panel_st7789(io, &panel_configuration, &mut panel) },
+        unsafe { esp_lcd_new_panel_st7789(io, &raw const panel_configuration, &raw mut panel) },
         "failed to create ST7789 display panel",
     )?;
     display.panel = panel as usize;

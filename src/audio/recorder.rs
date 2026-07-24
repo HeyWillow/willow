@@ -408,7 +408,7 @@ impl CaptureRuntime {
         match wake_state {
             WakeState::Detected(_) => {
                 send_event(events, CaptureEvent::WakeDetected { volume_db })?;
-                // ADF reports only the wake result for this fetch. Force the
+                // ESP-SR reports only the wake result for this fetch. Force the
                 // next ordinary fetch to publish its current VAD state.
                 self.last_vad = None;
             }

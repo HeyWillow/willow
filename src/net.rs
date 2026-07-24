@@ -5,7 +5,7 @@ pub(crate) mod ntp;
 pub(crate) mod wifi;
 
 use core::{
-    ptr,
+    fmt, ptr,
     ptr::NonNull,
     sync::atomic::{AtomicPtr, Ordering},
 };
@@ -44,7 +44,7 @@ fn check(result: esp_err_t) -> Result<(), EspError> {
 }
 
 #[cfg(not(esp_idf_willow_ethernet))]
-fn fatal_wifi_provisioning(error: nvs::ReadError) -> ! {
+fn fatal_wifi_provisioning(error: &nvs::ReadError) -> ! {
     error!(target: NVS_LOG_TARGET, "failed to read Wi-Fi NVS configuration: {error}");
     ui::show_error("Fatal error!", Some("Failed to read NVS partition."));
 
@@ -73,7 +73,7 @@ pub(crate) fn initialize() -> Result<(), EspError> {
     {
         let wifi = match nvs::read_wifi() {
             Ok(wifi) => wifi,
-            Err(error) => fatal_wifi_provisioning(error),
+            Err(error) => fatal_wifi_provisioning(&error),
         };
         network_interface = wifi::initialize(wifi.psk.as_str(), wifi.ssid.as_str()).ok();
     }
@@ -96,9 +96,9 @@ fn network_interface() -> Option<NonNull<esp_netif_t>> {
 /// Returns a copy of the initialized network interface's hostname.
 pub(crate) fn hostname() -> Result<String, EspError> {
     let network_interface =
-        network_interface().ok_or_else(|| EspError::from_infallible::<ESP_FAIL>())?;
+        network_interface().ok_or_else(EspError::from_infallible::<ESP_FAIL>)?;
     let mut hostname = ptr::null();
-    check(unsafe { esp_netif_get_hostname(network_interface.as_ptr(), &mut hostname) })?;
+    check(unsafe { esp_netif_get_hostname(network_interface.as_ptr(), &raw mut hostname) })?;
 
     if hostname.is_null() {
         return Err(EspError::from_infallible::<ESP_FAIL>());
@@ -119,8 +119,19 @@ pub(crate) fn log_mac_address() {
         return;
     }
 
-    let [a, b, c, d, e, f] = address;
-    info!(target: LOG_TARGET, "MAC address: {a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}");
+    info!(target: LOG_TARGET, "MAC address: {}", MacAddress(address));
+}
+
+struct MacAddress([u8; 6]);
+
+impl fmt::Display for MacAddress {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            formatter,
+            "{:02x}:{:02x}:{:02x}:{:02x}:{:02x}:{:02x}",
+            self.0[0], self.0[1], self.0[2], self.0[3], self.0[4], self.0[5]
+        )
+    }
 }
 
 fn log_unhandled(event_base: esp_event_base_t, event_id: i32) {
@@ -151,9 +162,16 @@ fn set_hostname(
         return None;
     }
 
-    let [a, b, c, d, e, f] = address;
-    let hostname = CString::new(format!("willow-{a:02x}{b:02x}{c:02x}{d:02x}{e:02x}{f:02x}"))
-        .expect("a formatted MAC address cannot contain NUL");
+    let hostname = match CString::new(format!(
+        "willow-{:02x}{:02x}{:02x}{:02x}{:02x}{:02x}",
+        address[0], address[1], address[2], address[3], address[4], address[5]
+    )) {
+        Ok(hostname) => hostname,
+        Err(error) => {
+            error!(target: LOG_TARGET, "failed to format hostname: {error:#?}");
+            return None;
+        }
+    };
 
     if let Some(error) = EspError::from(unsafe {
         esp_netif_set_hostname(network_interface.as_ptr(), hostname.as_ptr())

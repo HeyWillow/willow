@@ -55,8 +55,8 @@ impl std::error::Error for UncompressedWriteError {
 
 /// Writes PCM and legacy streamed-WAV samples as signed little-endian PCM.
 ///
-/// The retained ADF WAV encoder is a pass-through element. WIS receives the
-/// same PCM bytes for `Pcm` and `Wav`, distinguished by its request header.
+/// Willow's streamed-WAV mode sends the same PCM bytes as `Pcm`; the WIS
+/// request header distinguishes the two formats.
 pub(super) fn write_uncompressed(
     format: WisFormat,
     samples: &[i16],

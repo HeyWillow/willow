@@ -1,12 +1,19 @@
 //! Rust-owned Willow UI rendered with `embedded-graphics`.
 //!
-//! Normal Rust functions expose semantic UI transitions. Temporary C exports
-//! at the bottom of this module only convert ABI values and delegate to those
-//! functions. A dedicated Rust task snapshots the state, renders changed bands
-//! into an RGB565 frame in PSRAM, and flushes them through a small internal DMA
-//! buffer. Bounded oversized lines are cached in PSRAM and only their viewport
-//! is flushed while scrolling. Touch polling is also Rust-owned and sends
-//! nonblocking cancellation through the Rust audio APIs.
+//! Normal Rust functions expose semantic UI transitions. A dedicated Rust task
+//! snapshots the state, renders changed bands into an RGB565 frame in PSRAM,
+//! and flushes them through a small internal DMA buffer. Bounded oversized
+//! lines are cached in PSRAM and only their viewport is flushed while
+//! scrolling. Touch polling sends nonblocking cancellation through the Rust
+//! audio APIs.
+
+#![allow(
+    clippy::cast_possible_truncation,
+    clippy::cast_possible_wrap,
+    clippy::cast_precision_loss,
+    clippy::cast_sign_loss,
+    reason = "display coordinates, glyph coverage, and framebuffer dimensions are bounded by the fixed 320x240 panel"
+)]
 
 use core::{convert::Infallible, mem::size_of, ptr, slice};
 use std::{
@@ -711,6 +718,10 @@ fn check(result: esp_err_t, operation: &str) -> Result<(), EspError> {
     }
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "the worker owns its state and both channel endpoints for its full lifetime"
+)]
 fn render_worker(
     state: Arc<Mutex<UiState>>,
     redraws: Receiver<()>,
@@ -799,8 +810,8 @@ impl Touch {
                 esp_lcd_new_panel_io_i2c_v2(
                     crate::i2c::handle()
                         .ok_or_else(EspError::from_infallible::<ESP_ERR_INVALID_STATE>)?,
-                    &io_configuration,
-                    &mut io,
+                    &raw const io_configuration,
+                    &raw mut io,
                 )
             },
             "failed to create touch panel IO",
@@ -820,10 +831,10 @@ impl Touch {
         let mut handle = ptr::null_mut();
         let result = match controller {
             TouchController::Gt911 => unsafe {
-                esp_lcd_touch_new_i2c_gt911(io, &touch_configuration, &mut handle)
+                esp_lcd_touch_new_i2c_gt911(io, &raw const touch_configuration, &raw mut handle)
             },
             TouchController::Tt21100 => unsafe {
-                esp_lcd_touch_new_i2c_tt21100(io, &touch_configuration, &mut handle)
+                esp_lcd_touch_new_i2c_tt21100(io, &raw const touch_configuration, &raw mut handle)
             },
         };
         if let Err(error) = check(result, "failed to initialize touch controller") {
@@ -851,10 +862,10 @@ impl Touch {
         if unsafe {
             esp_lcd_touch_get_coordinates(
                 self.handle,
-                &mut x,
-                &mut y,
-                &mut strength,
-                &mut points,
+                &raw mut x,
+                &raw mut y,
+                &raw mut strength,
+                &raw mut points,
                 1,
             )
         } {
@@ -906,6 +917,10 @@ fn cancel(state: &Arc<Mutex<UiState>>) {
     }
 }
 
+#[allow(
+    clippy::needless_pass_by_value,
+    reason = "the worker owns its state and startup sender for its full lifetime"
+)]
 fn touch_worker(state: Arc<Mutex<UiState>>, started: SyncSender<Result<(), EspError>>) {
     let touch = match Touch::new() {
         Ok(Some(touch)) => touch,

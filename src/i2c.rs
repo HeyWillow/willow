@@ -1,19 +1,19 @@
 //! I2C0 master bus ownership.
 //!
-//! Rust retains the native ESP-IDF bus for the firmware lifetime. The existing
-//! Rust touch and the retained ADF codec paths borrow its handle.
+//! Rust retains the native ESP-IDF bus for the firmware lifetime. Touch,
+//! display, and audio codecs borrow its handle.
 
 use core::ptr;
 use std::sync::OnceLock;
 
 use esp_idf_sys::{
-    ESP_ERR_INVALID_STATE, EspError, esp_err_t, gpio_num_t_GPIO_NUM_8, gpio_num_t_GPIO_NUM_18,
-    i2c_addr_bit_len_t_I2C_ADDR_BIT_LEN_7, i2c_del_master_bus, i2c_device_config_t,
-    i2c_master_bus_add_device, i2c_master_bus_config_t, i2c_master_bus_config_t__bindgen_ty_1,
-    i2c_master_bus_config_t__bindgen_ty_2, i2c_master_bus_handle_t, i2c_master_bus_rm_device,
-    i2c_master_dev_handle_t, i2c_master_probe, i2c_master_transmit, i2c_master_transmit_receive,
-    i2c_new_master_bus, i2c_port_num_t, i2c_port_t_I2C_NUM_0,
-    soc_periph_i2c_clk_src_t_I2C_CLK_SRC_DEFAULT,
+    ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, EspError, esp_err_t, gpio_num_t_GPIO_NUM_8,
+    gpio_num_t_GPIO_NUM_18, i2c_addr_bit_len_t_I2C_ADDR_BIT_LEN_7, i2c_del_master_bus,
+    i2c_device_config_t, i2c_master_bus_add_device, i2c_master_bus_config_t,
+    i2c_master_bus_config_t__bindgen_ty_1, i2c_master_bus_config_t__bindgen_ty_2,
+    i2c_master_bus_handle_t, i2c_master_bus_rm_device, i2c_master_dev_handle_t, i2c_master_probe,
+    i2c_master_transmit, i2c_master_transmit_receive, i2c_new_master_bus, i2c_port_num_t,
+    i2c_port_t_I2C_NUM_0, soc_periph_i2c_clk_src_t_I2C_CLK_SRC_DEFAULT,
 };
 use log::{debug, error};
 
@@ -160,8 +160,10 @@ pub fn init() -> Result<(), EspError> {
 
     let mut flags = i2c_master_bus_config_t__bindgen_ty_2::default();
     flags.set_enable_internal_pullup(1);
+    let i2c_port: i2c_port_num_t = i32::try_from(i2c_port_t_I2C_NUM_0)
+        .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
     let configuration = i2c_master_bus_config_t {
-        i2c_port: i2c_port_t_I2C_NUM_0 as i2c_port_num_t,
+        i2c_port,
         sda_io_num: gpio_num_t_GPIO_NUM_8,
         scl_io_num: gpio_num_t_GPIO_NUM_18,
         __bindgen_anon_1: i2c_master_bus_config_t__bindgen_ty_1 {
@@ -174,7 +176,7 @@ pub fn init() -> Result<(), EspError> {
     };
     let mut handle = ptr::null_mut();
     check(
-        unsafe { i2c_new_master_bus(&configuration, &mut handle) },
+        unsafe { i2c_new_master_bus(&raw const configuration, &raw mut handle) },
         "failed to initialize I2C0 master bus",
     )?;
 
