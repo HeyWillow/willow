@@ -1,1 +1,0 @@
-#define DEFAULT_MIC_GAIN 14

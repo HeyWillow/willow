@@ -8,10 +8,8 @@
 //! is flushed while scrolling. Touch polling is also Rust-owned and sends
 //! nonblocking cancellation through the Rust audio APIs.
 
-use core::{convert::Infallible, ffi::c_char, mem::size_of, ptr, slice};
+use core::{convert::Infallible, mem::size_of, ptr, slice};
 use std::{
-    borrow::Cow,
-    ffi::CStr,
     ptr::NonNull,
     sync::{
         Arc, Mutex, OnceLock, PoisonError,
@@ -1118,40 +1116,4 @@ pub(crate) fn notification_end() {
     update(|state| {
         state.cancel_action = CancelAction::None;
     });
-}
-
-unsafe fn text<'a>(pointer: *const c_char) -> Option<Cow<'a, str>> {
-    if pointer.is_null() {
-        None
-    } else {
-        Some(unsafe { CStr::from_ptr(pointer) }.to_string_lossy())
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ui_show_recognition(heading: *const c_char, body: *const c_char) {
-    let Some(heading) = (unsafe { text(heading) }) else {
-        return;
-    };
-    let Some(body) = (unsafe { text(body) }) else {
-        return;
-    };
-    show_recognition(&heading, &body);
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_ui_show_listening() {
-    show_listening();
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_ui_show_thinking(multiwake_won: bool) {
-    show_thinking(multiwake_won);
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ui_show_ready(message: *const c_char) {
-    if let Some(message) = unsafe { text(message) } {
-        show_ready(&message);
-    }
 }

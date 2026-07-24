@@ -184,9 +184,3 @@ pub fn init() -> Result<(), EspError> {
         })
         .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_STATE>())
 }
-
-/// Returns a borrowed I2C0 master handle owned by Rust for the firmware lifetime.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_i2c_master_handle() -> i2c_master_bus_handle_t {
-    handle().unwrap_or_default()
-}

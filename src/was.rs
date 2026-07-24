@@ -3,7 +3,7 @@
 mod notification;
 
 use core::{
-    ffi::{c_char, c_void},
+    ffi::c_void,
     slice, str,
     sync::atomic::{AtomicBool, AtomicPtr, Ordering},
 };
@@ -15,9 +15,9 @@ use std::{
 use esp_idf_svc::hal::delay::{FreeRtos, TickType};
 use esp_idf_sys::{
     CONFIG_FREERTOS_NO_AFFINITY, ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_ERR_NO_MEM,
-    ESP_FAIL, ESP_OK, EspError, esp_efuse_mac_get_default, esp_err_t, esp_event_base_t,
-    esp_log_level_set, esp_log_level_t_ESP_LOG_DEBUG, esp_websocket_client,
-    esp_websocket_client_close, esp_websocket_client_config_t, esp_websocket_client_destroy,
+    ESP_FAIL, EspError, esp_efuse_mac_get_default, esp_event_base_t, esp_log_level_set,
+    esp_log_level_t_ESP_LOG_DEBUG, esp_websocket_client, esp_websocket_client_close,
+    esp_websocket_client_config_t, esp_websocket_client_destroy,
     esp_websocket_client_destroy_on_exit, esp_websocket_client_handle_t, esp_websocket_client_init,
     esp_websocket_client_is_connected, esp_websocket_client_send_text, esp_websocket_client_start,
     esp_websocket_client_stop, esp_websocket_event_data_t,
@@ -820,41 +820,4 @@ pub(crate) fn initialize(url: &str) -> Result<(), EspError> {
 
     let url = CString::new(url).map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
     initialize_client(SERVER_URL.get_or_init(|| url))
-}
-
-/// Wraps a WIS response in the WAS endpoint command envelope.
-///
-/// # Safety
-///
-/// `json` must point to a valid NUL-terminated string for the duration of this
-/// call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_was_send_endpoint(json: *const c_char) -> esp_err_t {
-    if json.is_null() {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    let Ok(json) = (unsafe { CStr::from_ptr(json) }).to_str() else {
-        return ESP_OK;
-    };
-    let Ok(response) = serde_json::from_str::<SpeechToTextResponse>(json) else {
-        return ESP_OK;
-    };
-
-    send_endpoint(&response).map_or_else(
-        |error| error.code(),
-        |sent| i32::try_from(sent).unwrap_or(i32::MAX),
-    )
-}
-
-/// Sends a wake-end event from the retained C recorder callback.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_was_send_wake_end() {
-    let _ = send_wake_end();
-}
-
-/// Sends a wake-start event from the retained C recorder callback.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_was_send_wake_start(wake_volume: f32) {
-    let _ = send_wake_start(wake_volume);
 }
