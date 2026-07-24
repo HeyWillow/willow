@@ -26,9 +26,11 @@ use esp_idf_sys::{
 use log::{error, info, warn};
 use serde_json::Value;
 
-use crate::{audio, backlight, config, net, state, system, ui};
+use crate::{audio, backlight, config, net, nvs, ota, state, system, ui};
 
-use self::protocol::{Command, CommandResult, DeviceIdentity, Event, InboundMessage, WakeResult};
+use self::protocol::{
+    Command, CommandResult, DeviceIdentity, Event, InboundCommand, InboundMessage, WakeResult,
+};
 
 const LOG_TARGET: &str = "WILLOW/WAS";
 const DEINIT_DELAY_MS: u32 = 2_000;
@@ -183,7 +185,7 @@ fn handle_command_result(result: &CommandResult) {
     }
 }
 
-fn handle_results(message: &str) -> bool {
+fn handle_control_message(message: &str) -> bool {
     let Ok(message) = serde_json::from_str::<InboundMessage>(message) else {
         return false;
     };
@@ -194,8 +196,67 @@ fn handle_results(message: &str) -> bool {
     } else if let Some(result) = message.result.as_ref() {
         handle_command_result(result);
         true
+    } else if let Some(document) = message.config {
+        let document = match serde_json::to_vec_pretty(&document) {
+            Ok(document) => document,
+            Err(error) => {
+                error!(target: LOG_TARGET, "failed to serialize configuration: {error:#?}");
+                return true;
+            }
+        };
+        info!(
+            target: LOG_TARGET,
+            "found config in WebSocket message: {}",
+            String::from_utf8_lossy(&document)
+        );
+        config::replace(&document)
+    } else if let Some(document) = message.nvs {
+        info!(target: LOG_TARGET, "found NVS provisioning document in WebSocket message");
+        let document = match serde_json::to_vec(&document) {
+            Ok(document) => document,
+            Err(error) => {
+                error!(target: LOG_TARGET, "failed to serialize NVS document: {error:#?}");
+                return true;
+            }
+        };
+        if let Err(error) = nvs::apply_document(&document) {
+            error!(target: LOG_TARGET, "failed to apply NVS document: {error:#?}");
+            return true;
+        }
+
+        info!(target: LOG_TARGET, "restarting to apply NVS changes");
+        ui::show_center_message("Connectivity Updated");
+        if let Err(error) = backlight::reset_display_timer(true) {
+            error!(target: LOG_TARGET, "failed to pause display timer: {error:#?}");
+        }
+        backlight::set(true, false);
+        deinitialize();
+        system::restart_delayed()
     } else {
-        false
+        match message.command {
+            Some(InboundCommand::OtaStart) => {
+                info!(target: LOG_TARGET, "found command in WebSocket message: ota_start");
+                if let Some(url) = message.ota_url.as_deref() {
+                    info!(target: LOG_TARGET, "OTA URL: {url}");
+                    if let Err(error) = ota::start(url) {
+                        error!(target: LOG_TARGET, "failed to start OTA task: {error:#?}");
+                    }
+                }
+                true
+            }
+            Some(InboundCommand::Restart) => {
+                info!(target: LOG_TARGET, "found command in WebSocket message: restart");
+                info!(target: LOG_TARGET, "restart command received. restart");
+                ui::show_center_message("WAS Restart");
+                backlight::set(true, false);
+                deinitialize();
+                system::restart_delayed()
+            }
+            Some(
+                InboundCommand::Identify | InboundCommand::Notify | InboundCommand::Unknown(_),
+            )
+            | None => false,
+        }
     }
 }
 
@@ -433,14 +494,14 @@ pub extern "C" fn rust_was_is_connected(wait: bool) -> bool {
     is_connected(wait)
 }
 
-/// Handles result messages before the retained C parser sees other messages.
+/// Handles migrated messages before the retained C notification parser.
 ///
 /// # Safety
 ///
 /// `message` must either be null or point to a valid NUL-terminated string for
 /// the duration of this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_was_handle_results(message: *const c_char) -> bool {
+pub unsafe extern "C" fn rust_was_handle_control(message: *const c_char) -> bool {
     if message.is_null() {
         return false;
     }
@@ -448,7 +509,7 @@ pub unsafe extern "C" fn rust_was_handle_results(message: *const c_char) -> bool
     let Ok(message) = (unsafe { CStr::from_ptr(message) }).to_str() else {
         return false;
     };
-    handle_results(message)
+    handle_control_message(message)
 }
 
 /// Returns the firmware-lifetime mutex borrowed by the retained C notification
@@ -462,12 +523,6 @@ pub extern "C" fn rust_was_notify_mutex() -> SemaphoreHandle_t {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_was_request_config() {
     let _ = request_config();
-}
-
-/// Stops WAS on behalf of retained C restart and OTA paths.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_was_deinit() {
-    deinitialize();
 }
 
 /// Wraps a WIS response in the WAS endpoint command envelope.

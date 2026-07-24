@@ -334,11 +334,6 @@ fn ffi_result(result: Result<(), AudioError>) -> esp_err_t {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rust_audio_deinit() {
-    deinitialize();
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn rust_audio_cancel_playback() {
     if let Err(source) = cancel_playback() {
         error!(target: LOG_TARGET, "failed to cancel playback: {source:#?}");

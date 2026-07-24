@@ -1,4 +1,4 @@
-//! System-level operations shared with the retained C application.
+//! System-level hardware identification and restart operations.
 
 use esp_idf_svc::hal::{delay::FreeRtos, reset};
 use esp_idf_sys::esp_random;
@@ -61,10 +61,4 @@ pub(crate) fn restart_delayed() -> ! {
     crate::ui::show_connecting(&format!("Restarting in {delay_seconds} seconds"));
     FreeRtos::delay_ms(delay_seconds * 1_000);
     reset::restart()
-}
-
-/// Restarts after a delay on behalf of callers not yet migrated from C.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_system_restart_delayed() {
-    restart_delayed()
 }

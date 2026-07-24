@@ -1,6 +1,6 @@
 //! HTTP-to-OTA transfer and upgrade coordination.
 
-use core::ffi::{CStr, c_char, c_void};
+use core::ffi::{c_char, c_void};
 use core::fmt;
 use core::slice;
 
@@ -289,28 +289,5 @@ pub(crate) fn start(url: &str) -> Result<(), EspError> {
         // Task creation just failed, so recover on this surviving caller
         // instead of relying on another task to perform the restart.
         crate::system::restart_delayed()
-    }
-}
-
-/// Starts an upgrade on behalf of the retained C message parser.
-///
-/// # Safety
-///
-/// `url` must either be null or point to a valid NUL-terminated string for
-/// the duration of this call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ota_start(url: *const c_char) {
-    if url.is_null() {
-        error!(target: LOG_TARGET, "OTA URL is null");
-        return;
-    }
-
-    let Ok(url) = unsafe { CStr::from_ptr(url) }.to_str() else {
-        error!(target: LOG_TARGET, "OTA URL is not valid UTF-8");
-        return;
-    };
-
-    if let Err(error) = start(url) {
-        error!(target: LOG_TARGET, "failed to start OTA task: {error:#?}");
     }
 }

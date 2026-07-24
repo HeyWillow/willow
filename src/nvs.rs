@@ -25,7 +25,6 @@ use willow_schema::nvs::v1::{Config, Was};
 #[cfg(not(esp_idf_willow_ethernet))]
 use willow_schema::nvs::v1::{Wifi, WifiPsk, WifiPskError, WifiSsid, WifiSsidError};
 
-const APPLY_LOG_TARGET: &str = "WILLOW/WAS";
 const READ_LOG_TARGET: &str = "WILLOW/MAIN";
 
 static DEFAULT_PARTITION: OnceLock<EspDefaultNvsPartition> = OnceLock::new();
@@ -48,6 +47,7 @@ impl<'a> NvsBatch<'a> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) enum ApplyError {
     InteriorNul(&'static str),
     Json(serde_json::Error),
@@ -245,33 +245,6 @@ pub unsafe extern "C" fn rust_nvs_read_was_url(output: *mut c_char, output_len: 
         read_was().and_then(|was| unsafe { copy_string("WAS/URL", &was.url, output, output_len) });
     if let Err(error) = result {
         error!(target: READ_LOG_TARGET, "failed to read WAS NVS configuration: {error}");
-        return false;
-    }
-
-    true
-}
-
-/// Applies a complete NVS provisioning document supplied by the C WebSocket
-/// message handler.
-///
-/// The schema requires every value Willow needs to reconnect after C schedules
-/// the existing restart. No document contents are logged here because the
-/// Wi-Fi passphrase is confidential.
-///
-/// # Safety
-///
-/// `data` must either be null or point to a valid NUL-terminated byte string
-/// for the duration of this call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_nvs_apply(data: *const c_char) -> bool {
-    if data.is_null() {
-        error!(target: APPLY_LOG_TARGET, "cannot apply a null NVS document");
-        return false;
-    }
-
-    let data = unsafe { CStr::from_ptr(data) };
-    if let Err(error) = apply_document(data.to_bytes()) {
-        error!(target: APPLY_LOG_TARGET, "failed to apply NVS document: {error}");
         return false;
     }
 

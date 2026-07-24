@@ -43,39 +43,11 @@ void willow_was_event_handler(
             if (data->op_code == WS_TRANSPORT_OPCODES_TEXT) {
                 char *resp = strndup((char *)data->data_ptr, data->data_len);
                 ESP_LOGI(TAG, "received text data on WebSocket: %s", resp);
-                if (rust_was_handle_results(resp)) {
+                if (rust_was_handle_control(resp)) {
                     free(resp);
                     break;
                 }
                 cJSON *cjson = cJSON_Parse(resp);
-
-                cJSON *json_config = cJSON_GetObjectItemCaseSensitive(cjson, "config");
-                if (cJSON_IsObject(json_config)) {
-                    char *config = cJSON_Print(json_config);
-                    ESP_LOGI(TAG, "found config in WebSocket message: %s", config);
-                    rust_config_write(config);
-                    cJSON_free(config);
-                    goto cleanup;
-                }
-
-                cJSON *json_nvs = cJSON_GetObjectItemCaseSensitive(cjson, "nvs");
-                if (cJSON_IsObject(json_nvs)) {
-                    char *nvs = cJSON_Print(json_nvs);
-                    ESP_LOGI(TAG, "found nvs in WebSocket message: %s", nvs);
-
-                    if (!rust_nvs_apply(nvs)) {
-                        cJSON_free(nvs);
-                        goto cleanup;
-                    }
-                    cJSON_free(nvs);
-
-                    ESP_LOGI(TAG, "restarting to apply NVS changes");
-                    rust_ui_show_center_message("Connectivity Updated");
-                    rust_display_timer_reset(true);
-                    rust_backlight_set(true, false);
-                    rust_was_deinit();
-                    rust_system_restart_delayed();
-                }
 
                 cJSON *json_cmd = cJSON_GetObjectItemCaseSensitive(cjson, "cmd");
                 if (cJSON_IsString(json_cmd) && json_cmd->valuestring != NULL) {
@@ -185,22 +157,6 @@ void willow_was_event_handler(
                         goto cleanup;
                     }
 
-                    if (strcmp(json_cmd->valuestring, "ota_start") == 0) {
-                        cJSON *json_ota_url = cJSON_GetObjectItemCaseSensitive(cjson, "ota_url");
-                        if (cJSON_IsString(json_ota_url) && json_ota_url->valuestring != NULL) {
-                            ESP_LOGI(TAG, "OTA URL: %s", json_ota_url->valuestring);
-                            rust_ota_start(json_ota_url->valuestring);
-                        }
-                        goto cleanup;
-                    }
-
-                    if (strcmp(json_cmd->valuestring, "restart") == 0) {
-                        ESP_LOGI(TAG, "restart command received. restart");
-                        rust_ui_show_center_message("WAS Restart");
-                        rust_backlight_set(true, false);
-                        rust_was_deinit();
-                        rust_system_restart_delayed();
-                    }
                 }
 
 cleanup:

@@ -1,8 +1,6 @@
 //! Typed configuration ownership and update coordination.
 
-use core::ffi::c_char;
 use std::{
-    ffi::CStr,
     fs,
     io::{self, ErrorKind},
     sync::OnceLock,
@@ -92,21 +90,17 @@ pub(crate) fn write(data: &[u8]) -> io::Result<()> {
     fs::write(CONFIG_PATH, data)
 }
 
-fn replace_optional(data: Option<&[u8]>) -> ! {
+/// Replaces the stored document and restarts after stopping active services.
+pub(crate) fn replace(data: &[u8]) -> ! {
     crate::was::deinitialize();
     crate::audio::deinitialize();
 
-    let updated = if let Some(data) = data {
-        match write(data) {
-            Ok(()) => true,
-            Err(error) => {
-                error!(target: LOG_TARGET, "failed to write {CONFIG_PATH}: {error:#?}");
-                false
-            }
+    let updated = match write(data) {
+        Ok(()) => true,
+        Err(error) => {
+            error!(target: LOG_TARGET, "failed to write {CONFIG_PATH}: {error:#?}");
+            false
         }
-    } else {
-        error!(target: LOG_TARGET, "cannot write a null configuration");
-        false
     };
 
     if updated {
@@ -119,25 +113,4 @@ fn replace_optional(data: Option<&[u8]>) -> ! {
     }
 
     crate::system::restart_delayed()
-}
-
-/// Replaces the stored document and restarts after stopping active services.
-pub(crate) fn replace(data: &[u8]) -> ! {
-    replace_optional(Some(data))
-}
-
-/// Replaces configuration on behalf of the retained C message parser.
-///
-/// # Safety
-///
-/// `data` must either be null or point to a valid NUL-terminated byte string
-/// for the duration of this call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_config_write(data: *const c_char) {
-    if data.is_null() {
-        replace_optional(None);
-    }
-
-    let data = unsafe { CStr::from_ptr(data) };
-    replace(data.to_bytes())
 }

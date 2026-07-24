@@ -1134,13 +1134,6 @@ pub extern "C" fn rust_ui_hide_connecting() {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ui_show_center_message(message: *const c_char) {
-    if let Some(message) = unsafe { text(message) } {
-        show_center_message(&message);
-    }
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_ui_show_error(primary: *const c_char, secondary: *const c_char) {
     let Some(primary) = (unsafe { text(primary) }) else {
         return;
