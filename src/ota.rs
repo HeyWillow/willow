@@ -1,6 +1,6 @@
-//! Synchronous HTTP-to-OTA transfer engine.
+//! HTTP-to-OTA transfer and upgrade coordination.
 
-use core::ffi::{CStr, c_char};
+use core::ffi::{CStr, c_char, c_void};
 use core::fmt;
 use core::slice;
 
@@ -9,15 +9,19 @@ use esp_idf_svc::handle::RawHandle;
 use esp_idf_svc::http::client::{Configuration, EspHttpConnection, Method};
 use esp_idf_svc::ota::{EspFirmwareInfoLoad, EspOta};
 use esp_idf_sys::{
-    EspError, esp_app_desc_t, esp_app_get_description, esp_http_client_is_complete_data_received,
-    esp_image_header_t, esp_image_segment_header_t, esp_task_wdt_config_t,
-    esp_task_wdt_reconfigure,
+    CONFIG_FREERTOS_NO_AFFINITY, ESP_FAIL, EspError, esp_app_desc_t, esp_app_get_description,
+    esp_http_client_is_complete_data_received, esp_image_header_t, esp_image_segment_header_t,
+    esp_task_wdt_config_t, esp_task_wdt_reconfigure, xTaskCreatePinnedToCore,
 };
 use log::{debug, error, info, warn};
 
 const BUFFER_SIZE: usize = 4096;
 const HTTP_OK: u16 = 200;
+const INSTALL_TASK_PRIORITY: u32 = 5;
+const INSTALL_TASK_STACK_SIZE: u32 = 8_192;
 const LOG_TARGET: &str = "WILLOW/OTA";
+const SERVICE_SHUTDOWN_DELAY_MS: u32 = 1_000;
+const TASK_CREATED: i32 = 1;
 const USER_AGENT: &str = concat!("Willow/", env!("WILLOW_VERSION"));
 const WATCHDOG_TIMEOUT_MS: u32 = 30_000;
 const WRITE_DELAY_MS: u32 = 10;
@@ -69,7 +73,9 @@ fn adjust_watchdog() {
         trigger_panic: true,
     };
 
-    if let Some(error) = EspError::from(unsafe { esp_task_wdt_reconfigure(&configuration) }) {
+    if let Some(error) =
+        EspError::from(unsafe { esp_task_wdt_reconfigure(&raw const configuration) })
+    {
         warn!(target: LOG_TARGET, "failed to adjust task watchdog: {error}");
     }
 }
@@ -92,12 +98,12 @@ fn log_running_firmware(ota: &EspOta) {
     match running_slot {
         Ok(slot) => match slot.firmware {
             Some(firmware) => {
-                info!(target: LOG_TARGET, "current firmware version: {}", firmware.version)
+                info!(target: LOG_TARGET, "current firmware version: {}", firmware.version);
             }
             None => warn!(target: LOG_TARGET, "current firmware version is unavailable"),
         },
         Err(error) => {
-            warn!(target: LOG_TARGET, "failed to read current firmware version: {error}")
+            warn!(target: LOG_TARGET, "failed to read current firmware version: {error}");
         }
     }
 }
@@ -175,7 +181,7 @@ pub(crate) fn install(url: &str) -> Result<(), InstallError> {
 
     // `initiate_update` deliberately uses OTA_SIZE_UNKNOWN, preserving the
     // previous full-partition erase. If any later operation fails, dropping
-    // `update` invokes esp_ota_abort before this function returns to C.
+    // `update` invokes esp_ota_abort before this function returns.
     adjust_watchdog();
     info!(target: LOG_TARGET, "starting OTA");
     let mut update = ota
@@ -218,24 +224,93 @@ pub(crate) fn install(url: &str) -> Result<(), InstallError> {
     Ok(())
 }
 
-/// Converts the borrowed C URL for the Rust OTA installer.
+unsafe extern "C" fn install_task(data: *mut c_void) {
+    // SAFETY: `start` transfers exactly one boxed String to a successfully
+    // created task, and no other path reconstructs it after that success.
+    let url = unsafe { Box::from_raw(data.cast::<String>()) };
+    let installed = match install(&url) {
+        Ok(()) => true,
+        Err(error) => {
+            error!(target: LOG_TARGET, "OTA failed: {error:#?}");
+            false
+        }
+    };
+    drop(url);
+
+    info!(
+        target: LOG_TARGET,
+        "OTA {}, restarting",
+        if installed { "completed" } else { "failed" }
+    );
+    crate::ui::show_center_message(if installed {
+        "Upgrade Done"
+    } else {
+        "Upgrade Failed"
+    });
+    crate::system::restart_delayed()
+}
+
+/// Stops active services and starts an owned OTA installation task.
+pub(crate) fn start(url: &str) -> Result<(), EspError> {
+    let url = Box::new(url.to_owned());
+    let no_affinity = i32::try_from(CONFIG_FREERTOS_NO_AFFINITY)
+        .map_err(|_| EspError::from_infallible::<ESP_FAIL>())?;
+
+    if let Err(error) = crate::backlight::reset_display_timer(true) {
+        error!(target: LOG_TARGET, "failed to pause display timer: {error:#?}");
+    }
+    crate::ui::show_center_message("Starting Upgrade");
+    crate::backlight::set(true, false);
+
+    crate::audio::deinitialize();
+    crate::was::deinitialize();
+
+    FreeRtos::delay_ms(SERVICE_SHUTDOWN_DELAY_MS);
+
+    let url = Box::into_raw(url);
+    let status = unsafe {
+        xTaskCreatePinnedToCore(
+            Some(install_task),
+            c"ota_task".as_ptr(),
+            INSTALL_TASK_STACK_SIZE,
+            url.cast(),
+            INSTALL_TASK_PRIORITY,
+            core::ptr::null_mut(),
+            no_affinity,
+        )
+    };
+    if status == TASK_CREATED {
+        Ok(())
+    } else {
+        unsafe { drop(Box::from_raw(url)) };
+        let error = EspError::from_infallible::<ESP_FAIL>();
+        error!(target: LOG_TARGET, "failed to start OTA task: {error:?}; restarting");
+        crate::ui::show_center_message("Upgrade Failed");
+        // Task creation just failed, so recover on this surviving caller
+        // instead of relying on another task to perform the restart.
+        crate::system::restart_delayed()
+    }
+}
+
+/// Starts an upgrade on behalf of the retained C message parser.
+///
+/// # Safety
+///
+/// `url` must either be null or point to a valid NUL-terminated string for
+/// the duration of this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ota_install(url: *const c_char) -> bool {
+pub unsafe extern "C" fn rust_ota_start(url: *const c_char) {
     if url.is_null() {
         error!(target: LOG_TARGET, "OTA URL is null");
-        return false;
+        return;
     }
 
     let Ok(url) = unsafe { CStr::from_ptr(url) }.to_str() else {
         error!(target: LOG_TARGET, "OTA URL is not valid UTF-8");
-        return false;
+        return;
     };
 
-    match install(url) {
-        Ok(()) => true,
-        Err(error) => {
-            error!(target: LOG_TARGET, "OTA failed: {error}");
-            false
-        }
+    if let Err(error) = start(url) {
+        error!(target: LOG_TARGET, "failed to start OTA task: {error:#?}");
     }
 }

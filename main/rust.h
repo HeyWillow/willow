@@ -25,7 +25,7 @@ void rust_config_write(const char *data);
 esp_err_t rust_network_init(void);
 bool rust_nvs_apply(const char *data);
 bool rust_nvs_read_was_url(char *output, size_t output_len);
-bool rust_ota_install(const char *url);
+void rust_ota_start(const char *url);
 void rust_system_restart_delayed(void);
 esp_websocket_client_handle_t rust_was_client_handle(void);
 void rust_was_deinit(void);

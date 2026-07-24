@@ -3,7 +3,6 @@
 #include "esp_transport_ws.h"
 #include "esp_websocket_client.h"
 
-#include "ota.h"
 #include "rust.h"
 #include "shared.h"
 #include "was.h"
@@ -216,11 +215,8 @@ void willow_was_event_handler(
                     if (strcmp(json_cmd->valuestring, "ota_start") == 0) {
                         cJSON *json_ota_url = cJSON_GetObjectItemCaseSensitive(cjson, "ota_url");
                         if (cJSON_IsString(json_ota_url) && json_ota_url->valuestring != NULL) {
-                            // we can't pass json_ota_url->valuestring to ota_start
-                            // it will be freed before the OTA task reads it
-                            char *ota_url = strndup(json_ota_url->valuestring, (strlen(json_ota_url->valuestring)));
-                            ESP_LOGI(TAG, "OTA URL: %s", ota_url);
-                            ota_start(ota_url);
+                            ESP_LOGI(TAG, "OTA URL: %s", json_ota_url->valuestring);
+                            rust_ota_start(json_ota_url->valuestring);
                         }
                         goto cleanup;
                     }
