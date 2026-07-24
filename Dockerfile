@@ -1,4 +1,4 @@
-FROM espressif/idf:v5.3.4
+FROM espressif/idf:v5.4.4
 
 ARG DEBIAN_FRONTEND="noninteractive"
 
@@ -19,8 +19,7 @@ RUN apt-get -qq update && \
     && rm -rf /var/lib/apt/lists/*
 
 # Podman
-RUN useradd --create-home --uid 1000 build
-COPY --chown=1000 container.gitconfig /home/build/.gitconfig
+COPY --chown=ubuntu:ubuntu container.gitconfig /home/ubuntu/.gitconfig
 
 # Docker
 COPY container.gitconfig /root/.gitconfig

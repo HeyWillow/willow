@@ -51,7 +51,7 @@ fn check(result: esp_err_t, operation: &str) -> Result<(), EspError> {
 /// Builds the Rust equivalent of ESP-IDF's `ETH_DEFAULT_CONFIG()`.
 ///
 /// Bindgen cannot expose function-like C macros. These values mirror the
-/// ESP-IDF v5.3.4 macro used by the Cargo build.
+/// ESP-IDF v5.4.4 macro used by the Cargo build.
 fn driver_configuration(
     mac: *mut esp_idf_sys::esp_eth_mac_t,
     phy: *mut esp_idf_sys::esp_eth_phy_t,
@@ -83,7 +83,9 @@ fn mac_configuration() -> eth_mac_config_t {
 fn phy_configuration() -> eth_phy_config_t {
     eth_phy_config_t {
         autonego_timeout_ms: 4_000,
+        hw_reset_assert_time_us: 0,
         phy_addr: WILLOW_ETHERNET_PHY,
+        post_hw_reset_delay_ms: 0,
         reset_gpio_num: WILLOW_ETHERNET_RST,
         reset_timeout_ms: 100,
     }
@@ -113,7 +115,7 @@ fn spi_device_configuration() -> spi_device_interface_config_t {
 /// Builds the Rust equivalent of ESP-IDF's `ETH_W5500_DEFAULT_CONFIG()` with
 /// Willow's interrupt pin.
 ///
-/// ESP-IDF v5.3 lets the W5500 driver add its own SPI device from this bus and
+/// ESP-IDF v5.4 lets the W5500 driver add its own SPI device from this bus and
 /// device configuration.
 fn w5500_configuration(spi_device: *mut spi_device_interface_config_t) -> eth_w5500_config_t {
     eth_w5500_config_t {

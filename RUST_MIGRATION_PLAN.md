@@ -27,8 +27,9 @@ Every commit must remain buildable, small, reviewable, and build-tested.
 - ESP-IDF and other Espressif components may be upgraded only in isolated
   commits when there is a concrete migration benefit and the upgrade is
   proven not to require ESP-SR 2.x or change `srmodels.bin`.
-- ESP-IDF remains at 5.3.4 for now because this migration currently provides
-  no concrete reason to upgrade it.
+- ESP-IDF 5.4.4 adds protection against an I2S DMA pointer being reused while
+  blocking reads or writes fall behind. ESP-SR remains at 1.9.5, and the
+  upgrade must not change `srmodels.bin`.
 - Consume `willow-protocol` from its published repository through a pinned
   Cargo Git revision.
 

@@ -181,6 +181,36 @@ ensure_rust() {
     activate_rust
 }
 
+clean_stale_idf_toolchain_artifacts() {
+    local active_compiler
+    local cached_compiler
+    local cargo_build_root="$WILLOW_PATH/target/xtensa-esp32s3-espidf/release/build"
+    local compiler_file
+
+    active_compiler=$(command -v xtensa-esp32s3-elf-gcc || true)
+    if [ -z "$active_compiler" ]; then
+        return
+    fi
+    active_compiler=$(readlink -f "$active_compiler")
+
+    for compiler_file in \
+        "$cargo_build_root"/esp-idf-sys-*/out/build/CMakeFiles/*/CMakeCCompiler.cmake; do
+        if [ ! -r "$compiler_file" ]; then
+            continue
+        fi
+
+        cached_compiler=$(sed -n \
+            's/^set(CMAKE_C_COMPILER "\(.*\)")$/\1/p' "$compiler_file")
+        cached_compiler=$(readlink -f "$cached_compiler" 2>/dev/null || true)
+        if [ "$cached_compiler" != "$active_compiler" ]; then
+            echo "ESP-IDF compiler changed; refreshing the esp-idf-sys build"
+            "$CARGO_HOME/bin/cargo" +esp clean -p esp-idf-sys \
+                --release --target xtensa-esp32s3-espidf
+            return
+        fi
+    done
+}
+
 contains_retired_adf_path() {
     local generated_root="$1"
 
@@ -370,6 +400,7 @@ fullclean)
 build)
     check_container
     ensure_rust
+    clean_stale_idf_toolchain_artifacts
     clean_retired_adf_artifacts
     if [ $2 ]; then
         echo "Adding timestamp to dev build"

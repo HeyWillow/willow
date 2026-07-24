@@ -9,9 +9,10 @@ use esp_idf_sys::{
     i2s_channel_write, i2s_comm_mode_t_I2S_COMM_MODE_STD,
     i2s_data_bit_width_t_I2S_DATA_BIT_WIDTH_32BIT, i2s_del_channel, i2s_dir_t_I2S_DIR_RX,
     i2s_dir_t_I2S_DIR_TX, i2s_mclk_multiple_t_I2S_MCLK_MULTIPLE_256, i2s_new_channel, i2s_port_t,
-    i2s_role_t_I2S_ROLE_MASTER, i2s_slot_bit_width_t_I2S_SLOT_BIT_WIDTH_32BIT,
-    i2s_slot_mode_t_I2S_SLOT_MODE_STEREO, i2s_std_clk_config_t, i2s_std_config_t,
-    i2s_std_gpio_config_t, i2s_std_gpio_config_t__bindgen_ty_1, i2s_std_slot_config_t,
+    i2s_role_t_I2S_ROLE_MASTER, i2s_role_t_I2S_ROLE_SLAVE,
+    i2s_slot_bit_width_t_I2S_SLOT_BIT_WIDTH_32BIT, i2s_slot_mode_t_I2S_SLOT_MODE_STEREO,
+    i2s_std_clk_config_t, i2s_std_config_t, i2s_std_gpio_config_t,
+    i2s_std_gpio_config_t__bindgen_ty_1, i2s_std_slot_config_t,
     i2s_std_slot_mask_t_I2S_STD_SLOT_BOTH, soc_periph_i2s_clk_src_t_I2S_CLK_SRC_DEFAULT,
 };
 use log::error;
@@ -374,16 +375,23 @@ impl DuplexChannels {
     fn verify_pair(&self, expected_port: i2s_port_t) -> Result<(), I2sError> {
         let receive = channel_snapshot("query initialized I2S RX", self.receive.0.handle())?;
         let transmit = channel_snapshot("query initialized I2S TX", self.transmit.0.handle())?;
+
+        // IDF 5.4 makes the later-initialized half of a full-duplex master
+        // pair an internal slave. TX is initialized first and remains the
+        // clock master; RX shares that clock through `full_duplex_slave`.
         let valid = receive.id == expected_port
             && transmit.id == expected_port
-            && receive.role == i2s_role_t_I2S_ROLE_MASTER
+            && receive.role == i2s_role_t_I2S_ROLE_SLAVE
             && transmit.role == i2s_role_t_I2S_ROLE_MASTER
             && receive.direction == i2s_dir_t_I2S_DIR_RX
             && transmit.direction == i2s_dir_t_I2S_DIR_TX
             && receive.mode == i2s_comm_mode_t_I2S_COMM_MODE_STD
             && transmit.mode == i2s_comm_mode_t_I2S_COMM_MODE_STD
-            && receive.pair == self.transmit.0.handle()
-            && transmit.pair == self.receive.0.handle()
+            // The channels were allocated jointly. Non-null controller pair
+            // handles plus the matching port and opposite directions prove
+            // full-duplex operation without comparing opaque pointer values.
+            && !receive.pair.is_null()
+            && !transmit.pair.is_null()
             && receive.dma_buffer_bytes > 0
             && transmit.dma_buffer_bytes > 0;
         if valid {
@@ -402,6 +410,7 @@ const fn channel_configuration(port: i2s_port_t) -> i2s_chan_config_t {
         dma_frame_num: DMA_FRAMES_PER_DESCRIPTOR,
         __bindgen_anon_1: i2s_chan_config_t__bindgen_ty_1 { auto_clear: true },
         auto_clear_before_cb: false,
+        allow_pd: false,
         intr_priority: 0,
     }
 }

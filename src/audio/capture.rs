@@ -55,7 +55,7 @@ impl fmt::Display for CaptureFramingError {
 ///
 /// With a reference the output remains `[mic0, mic1, slot0_low]` for parity
 /// with the existing Box configurations. Without one it is `[mic0, mic1]`, so
-/// CoreS3 does not present ADC low-bit residue to ESP-SR as an echo reference.
+/// `CoreS3` does not present ADC low-bit residue to ESP-SR as an echo reference.
 pub(super) fn extract_afe_inputs(
     raw: &[u8],
     output: &mut [i16],
