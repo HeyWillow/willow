@@ -95,6 +95,7 @@ pub(super) enum UploadCompletionEffect {
     None,
     Discard,
     Process,
+    ReportFailure,
 }
 
 /// Bounded side effects selected for one transition.
@@ -458,12 +459,12 @@ fn finish_upload(
 }
 
 const fn upload_completion(session: SessionState, has_response: bool) -> UploadCompletionEffect {
-    if !has_response {
-        UploadCompletionEffect::None
-    } else if session.multiwake_won() {
+    if !session.multiwake_won() {
+        UploadCompletionEffect::Discard
+    } else if has_response {
         UploadCompletionEffect::Process
     } else {
-        UploadCompletionEffect::Discard
+        UploadCompletionEffect::ReportFailure
     }
 }
 
@@ -582,6 +583,24 @@ mod tests {
     }
 
     #[test]
+    fn multiwake_loss_also_discards_upload_failures() {
+        let mut recorder = super::RecorderMachine::new(MULTIWAKE_POLICY);
+        let _ = recorder.apply(super::RecorderEvent::WakeDetected { volume_db: -4.0 });
+        let _ = recorder.apply(super::RecorderEvent::VadStarted);
+        let _ = recorder.apply(super::RecorderEvent::MultiwakeResult { won: false });
+        let _ = recorder.apply(super::RecorderEvent::WakeEnded);
+
+        let completed = recorder.apply(super::RecorderEvent::UploadCompleted {
+            has_response: false,
+        });
+        assert_eq!(
+            completed.upload_completion,
+            super::UploadCompletionEffect::Discard
+        );
+        assert_eq!(recorder.state(), super::RecorderState::Idle);
+    }
+
+    #[test]
     fn upload_can_complete_before_capture_reports_wake_end() {
         let mut recorder = super::RecorderMachine::new(CONFIRMING_POLICY);
         let _ = recorder.apply(super::RecorderEvent::WakeDetected { volume_db: -1.0 });
@@ -656,7 +675,7 @@ mod tests {
         );
         assert_eq!(
             failed.upload_completion,
-            super::UploadCompletionEffect::None
+            super::UploadCompletionEffect::ReportFailure
         );
         assert!(matches!(
             recorder.state(),

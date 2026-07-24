@@ -170,6 +170,11 @@ impl UploadSession {
         self.cancelled.store(true, Ordering::Release);
         self.finish()
     }
+
+    /// Prevents drop cleanup after the worker reports this session complete.
+    pub(super) fn acknowledge_completion(&mut self) {
+        self.finished = true;
+    }
 }
 
 impl Drop for UploadSession {
