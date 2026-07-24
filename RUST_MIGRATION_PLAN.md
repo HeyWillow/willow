@@ -29,6 +29,8 @@ Every commit must remain buildable, small, reviewable, and build-tested.
   proven not to require ESP-SR 2.x or change `srmodels.bin`.
 - ESP-IDF remains at 5.3.4 for now because this migration currently provides
   no concrete reason to upgrade it.
+- Consume `willow-protocol` from its published repository through a pinned
+  Cargo Git revision.
 
 Two component upgrades are justified:
 
@@ -158,7 +160,7 @@ build produces the identical `srmodels.bin` for the same board configuration.
 33. `was: handle wake and command results in Rust`
 34. `was: handle config, NVS, restart, and OTA commands`
 35. `was: run notifications in Rust`
-36. `protocol: extract the proven WAS types to willow-protocol`
+36. `protocol: consume published willow-protocol`
 37. `was: register the Rust WebSocket callback`
 
     Delete `was.c`, `was.h`, and `was_bindings.h`. This removes the local C

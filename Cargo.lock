@@ -1655,9 +1655,19 @@ dependencies = [
  "log",
  "ogg",
  "rusttype",
- "serde",
  "serde_json",
  "sha2",
+ "willow-protocol",
+ "willow-schema",
+]
+
+[[package]]
+name = "willow-protocol"
+version = "0.1.0"
+source = "git+https://github.com/HeyWillow/willow-protocol.git?rev=e05941790bbf56648477be7ddff2a788097e4fd8#e05941790bbf56648477be7ddff2a788097e4fd8"
+dependencies = [
+ "serde",
+ "serde_json",
  "willow-schema",
 ]
 

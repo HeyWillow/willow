@@ -13,7 +13,7 @@ use std::{
 
 use esp_idf_sys::{ESP_ERR_HTTP_EAGAIN, ESP_ERR_TIMEOUT};
 use log::{debug, error, info, warn};
-use serde_json::Value;
+use willow_protocol::wis::v1::SpeechToTextResponse;
 
 use crate::{backlight, input, sr::VadState, ui, was};
 
@@ -532,22 +532,24 @@ where
             return;
         };
         info!(target: LOG_TARGET, "WIS HTTP response: {body}");
-        if let Err(source) = was::send_endpoint(body) {
+        let response = match serde_json::from_str::<SpeechToTextResponse>(body) {
+            Ok(response) => response,
+            Err(source) => {
+                error!(target: LOG_TARGET, "invalid WIS response: {source}");
+                self.show_upload_failure(
+                    "Invalid WIS response",
+                    "Unexpected response format",
+                    true,
+                );
+                return;
+            }
+        };
+        if let Err(source) = was::send_endpoint(&response) {
             error!(target: LOG_TARGET, "failed to send WIS response to WAS: {source:#?}");
         }
 
-        let parsed = serde_json::from_str::<Value>(body).ok();
-        let speaker_status = parsed
-            .as_ref()
-            .and_then(|value| value.get("speaker_status"))
-            .and_then(Value::as_str)
-            .unwrap_or("I heard:");
-        let text = parsed
-            .as_ref()
-            .and_then(|value| value.get("text"))
-            .and_then(Value::as_str)
-            .unwrap_or(body);
-        ui::show_recognition(speaker_status, text);
+        let speaker_status = response.speaker_status.as_deref().unwrap_or("I heard:");
+        ui::show_recognition(speaker_status, &response.text);
     }
 
     fn report_upload_failure(&self, failure: &UploadError) {

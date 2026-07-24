@@ -1,7 +1,6 @@
 //! Willow Application Server transport ownership.
 
 mod notification;
-mod protocol;
 
 use core::{
     ffi::{c_char, c_void},
@@ -24,15 +23,16 @@ use esp_idf_sys::{
     esp_websocket_register_events, vTaskDelete, xTaskCreatePinnedToCore,
 };
 use log::{error, info, warn};
-use serde_json::Value;
-
-use crate::{audio, backlight, config, net, nvs, ota, state, system, ui};
+use willow_protocol::{
+    was::v1::{
+        Command, CommandResult, DeviceIdentity, Event, InboundCommand, InboundMessage,
+        Notification, WakeResult,
+    },
+    wis::v1::SpeechToTextResponse,
+};
 
 use self::notification::{CancelOutcome, NotificationLease, NotificationState};
-use self::protocol::{
-    Command, CommandResult, DeviceIdentity, Event, InboundCommand, InboundMessage, Notification,
-    WakeResult,
-};
+use crate::{audio, backlight, config, net, nvs, ota, state, system, ui};
 
 const LOG_TARGET: &str = "WILLOW/WAS";
 const DEINIT_DELAY_MS: u32 = 2_000;
@@ -127,16 +127,10 @@ fn send_text(message: &str) -> Result<usize, EspError> {
     }
 }
 
-pub(crate) fn send_endpoint(data: &str) -> Result<usize, EspError> {
+pub(crate) fn send_endpoint(data: &SpeechToTextResponse) -> Result<usize, EspError> {
     // The old nc_skip argument was only ever false, so a failed connection
     // check still reports the UI error and then attempts the send.
     let _ = is_connected(true);
-
-    let Ok(Value::Object(data)) = serde_json::from_str(data) else {
-        // Preserve the old successful no-op for a malformed or non-object
-        // response from WIS.
-        return Ok(0);
-    };
 
     let message = serde_json::to_string(&Command::Endpoint { data })
         .map_err(|_| EspError::from_infallible::<ESP_FAIL>())?;
@@ -730,8 +724,11 @@ pub unsafe extern "C" fn rust_was_send_endpoint(json: *const c_char) -> esp_err_
     let Ok(json) = (unsafe { CStr::from_ptr(json) }).to_str() else {
         return ESP_OK;
     };
+    let Ok(response) = serde_json::from_str::<SpeechToTextResponse>(json) else {
+        return ESP_OK;
+    };
 
-    send_endpoint(json).map_or_else(
+    send_endpoint(&response).map_or_else(
         |error| error.code(),
         |sent| i32::try_from(sent).unwrap_or(i32::MAX),
     )
