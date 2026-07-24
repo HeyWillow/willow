@@ -822,25 +822,6 @@ pub(crate) fn initialize(url: &str) -> Result<(), EspError> {
     initialize_client(SERVER_URL.get_or_init(|| url))
 }
 
-/// Initializes the WAS transport from a URL borrowed from retained C startup.
-///
-/// # Safety
-///
-/// `url` must point to a valid NUL-terminated string for the duration of this
-/// call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_was_init(url: *const c_char) -> esp_err_t {
-    if url.is_null() {
-        return ESP_ERR_INVALID_ARG;
-    }
-
-    let Ok(url) = (unsafe { CStr::from_ptr(url) }).to_str() else {
-        return ESP_ERR_INVALID_ARG;
-    };
-
-    initialize(url).map_or_else(|error| error.code(), |()| ESP_OK)
-}
-
 /// Wraps a WIS response in the WAS endpoint command envelope.
 ///
 /// # Safety

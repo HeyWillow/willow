@@ -6,7 +6,6 @@ mod config;
 #[cfg(esp_idf_mbedtls_ssl_proto_tls1_3)]
 mod crypto;
 mod display;
-mod ffi;
 mod i2c;
 mod input;
 mod logging;
@@ -70,7 +69,35 @@ fn main() {
     if let Err(error) = input::init() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
-    ffi::init();
+    if let Err(error) = net::initialize() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize network: {error:#?}");
+        unsafe { esp_idf_sys::esp_system_abort(c"Network initialization failed".as_ptr()) }
+    }
+
+    let was_config = match nvs::read_was() {
+        Ok(was_config) => was_config,
+        Err(error) => {
+            log::error!(
+                target: "WILLOW/MAIN",
+                "failed to read WAS NVS configuration: {error:#?}"
+            );
+            ui::show_error("Fatal error!", Some("Failed to read NVS partition."));
+            loop {
+                unsafe { esp_idf_sys::vTaskDelay(u32::MAX) }
+            }
+        }
+    };
+    if let Err(error) = was::initialize(was_config.url.as_str()) {
+        log::error!(
+            target: "WILLOW/MAIN",
+            "failed to initialize Willow Application Server connection: {error:#?}"
+        );
+        ui::show_error("Fatal error!", Some("WAS initialization failed."));
+    }
+
+    if !config::is_valid() {
+        unsafe { esp_idf_sys::vTaskDelay(u32::MAX) }
+    }
     if let Err(error) = audio::initialize() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize audio: {error:#?}");
         ui::show_error("Recorder init failed", Some("Check logs"));

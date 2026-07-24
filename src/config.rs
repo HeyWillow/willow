@@ -79,12 +79,6 @@ pub(crate) fn is_valid() -> bool {
     CONFIG.get().is_some()
 }
 
-/// Reports configuration validity to callers not yet migrated from C.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_config_is_valid() -> bool {
-    is_valid()
-}
-
 /// Writes a configuration document without parsing or rewriting its bytes.
 pub(crate) fn write(data: &[u8]) -> io::Result<()> {
     fs::write(CONFIG_PATH, data)

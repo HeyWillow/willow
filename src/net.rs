@@ -15,9 +15,9 @@ use std::{
 };
 
 use esp_idf_sys::{
-    CONFIG_LWIP_LOCAL_HOSTNAME, ESP_FAIL, ESP_OK, EspError, esp_err_t, esp_event_base_t,
-    esp_mac_type_t, esp_mac_type_t_ESP_MAC_ETH, esp_mac_type_t_ESP_MAC_WIFI_STA,
-    esp_netif_get_hostname, esp_netif_init, esp_netif_set_hostname, esp_netif_t, esp_read_mac,
+    CONFIG_LWIP_LOCAL_HOSTNAME, ESP_FAIL, EspError, esp_err_t, esp_event_base_t, esp_mac_type_t,
+    esp_mac_type_t_ESP_MAC_ETH, esp_mac_type_t_ESP_MAC_WIFI_STA, esp_netif_get_hostname,
+    esp_netif_init, esp_netif_set_hostname, esp_netif_t, esp_read_mac,
 };
 use log::{error, info};
 
@@ -121,15 +121,6 @@ pub(crate) fn log_mac_address() {
 
     let [a, b, c, d, e, f] = address;
     info!(target: LOG_TARGET, "MAC address: {a:02x}:{b:02x}:{c:02x}:{d:02x}:{e:02x}:{f:02x}");
-}
-
-/// Compatibility entry point for retained C startup.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_network_init() -> esp_err_t {
-    match initialize() {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
-    }
 }
 
 fn log_unhandled(event_base: esp_event_base_t, event_id: i32) {

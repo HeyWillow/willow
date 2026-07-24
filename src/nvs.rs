@@ -2,10 +2,9 @@
 //!
 //! This module owns the default NVS partition, validates boot-time values and
 //! complete WAS provisioning documents with `willow-schema`, and accesses the
-//! stored namespaces through the safe `esp-idf-svc` NVS API. Temporary FFI
-//! adapters copy boot values to C until their consumers migrate to Rust.
+//! stored namespaces through the safe `esp-idf-svc` NVS API.
 
-use core::{ffi::c_char, fmt, ptr};
+use core::fmt;
 use std::{
     ffi::{CStr, CString},
     string::String,
@@ -19,13 +18,10 @@ use esp_idf_svc::{
 use esp_idf_sys::{
     ESP_ERR_NVS_NO_FREE_PAGES, EspError, esp_err_t, nvs_commit, nvs_flash_erase, nvs_set_str,
 };
-use log::error;
 use willow_schema::nvs::v1::{Config, Was};
 
 #[cfg(not(esp_idf_willow_ethernet))]
 use willow_schema::nvs::v1::{Wifi, WifiPsk, WifiPskError, WifiSsid, WifiSsidError};
-
-const READ_LOG_TARGET: &str = "WILLOW/MAIN";
 
 static DEFAULT_PARTITION: OnceLock<EspDefaultNvsPartition> = OnceLock::new();
 
@@ -88,8 +84,8 @@ fn nvs_string(field: &'static str, value: &str) -> Result<CString, ApplyError> {
     CString::new(value).map_err(|_| ApplyError::InteriorNul(field))
 }
 
+#[derive(Debug)]
 pub(crate) enum ReadError {
-    InvalidOutput(&'static str),
     Missing(&'static str),
     Nvs(EspError),
     #[cfg(not(esp_idf_willow_ethernet))]
@@ -101,9 +97,6 @@ pub(crate) enum ReadError {
 impl fmt::Display for ReadError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::InvalidOutput(field) => {
-                write!(formatter, "output buffer for {field} is null or too small")
-            }
             Self::Missing(field) => write!(formatter, "missing NVS value {field}"),
             Self::Nvs(error) => write!(formatter, "NVS operation failed: {error}"),
             #[cfg(not(esp_idf_willow_ethernet))]
@@ -118,29 +111,6 @@ impl From<EspError> for ReadError {
     fn from(error: EspError) -> Self {
         Self::Nvs(error)
     }
-}
-
-/// Copies a Rust string into a caller-owned C buffer.
-///
-/// # Safety
-///
-/// `output` must point to writable storage for `output_len` bytes.
-unsafe fn copy_string(
-    field: &'static str,
-    value: &str,
-    output: *mut c_char,
-    output_len: usize,
-) -> Result<(), ReadError> {
-    if output.is_null() || value.len() >= output_len {
-        return Err(ReadError::InvalidOutput(field));
-    }
-
-    unsafe {
-        ptr::copy_nonoverlapping(value.as_ptr(), output.cast(), value.len());
-        output.add(value.len()).write(0);
-    }
-
-    Ok(())
 }
 
 fn default_partition() -> EspDefaultNvsPartition {
@@ -228,25 +198,4 @@ pub(crate) fn initialize() -> Result<(), EspError> {
     );
 
     Ok(())
-}
-
-/// Reads the provisioned WAS URL into the existing C compatibility buffer.
-///
-/// Rust owns the NVS partition and validates the namespace through the shared
-/// schema type. The URL is copied only because the remaining C WAS client
-/// still consumes its existing global buffer.
-///
-/// # Safety
-///
-/// `output` must point to writable storage for `output_len` bytes.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_nvs_read_was_url(output: *mut c_char, output_len: usize) -> bool {
-    let result =
-        read_was().and_then(|was| unsafe { copy_string("WAS/URL", &was.url, output, output_len) });
-    if let Err(error) = result {
-        error!(target: READ_LOG_TARGET, "failed to read WAS NVS configuration: {error}");
-        return false;
-    }
-
-    true
 }

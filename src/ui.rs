@@ -1129,15 +1129,6 @@ unsafe fn text<'a>(pointer: *const c_char) -> Option<Cow<'a, str>> {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ui_show_error(primary: *const c_char, secondary: *const c_char) {
-    let Some(primary) = (unsafe { text(primary) }) else {
-        return;
-    };
-    let secondary = unsafe { text(secondary) };
-    show_error(&primary, secondary.as_deref());
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_ui_show_recognition(heading: *const c_char, body: *const c_char) {
     let Some(heading) = (unsafe { text(heading) }) else {
         return;
