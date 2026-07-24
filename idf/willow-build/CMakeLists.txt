@@ -18,11 +18,6 @@ if(NOT DEFINED ENV{WILLOW_CARGO_FIRST})
     message(FATAL_ERROR "Willow firmware must be built through Cargo")
 endif()
 
-# main.c still conditionally provides the weak bridge until the next migration
-# commit. Apply the definition through the build property because Cargo's
-# default main-component CMake file now owns that source target.
-idf_build_set_property(COMPILE_DEFINITIONS WILLOW_CARGO_FIRST APPEND)
-
 spiffs_create_partition_image(user ../../spiffs/user FLASH_IN_PROJECT)
 
 # ESP-SR 1.9.5 packs models in filesystem traversal order. Repack the staged
