@@ -33,6 +33,10 @@ set(EXCLUDE_COMPONENTS
     "wifi_provisioning"
 )
 
+# Keep Willow's metadata-only component visible to standalone idf.py commands.
+# Cargo also registers it as an extra component for firmware builds.
+set(EXTRA_COMPONENT_DIRS "${CMAKE_CURRENT_LIST_DIR}/idf/willow-build")
+
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 project(willow)

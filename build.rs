@@ -45,7 +45,7 @@ fn main() {
 }
 
 fn guard_sr_boundary() -> Result<(), String> {
-    const MANIFEST: &str = "main/idf_component.yml";
+    const MANIFEST: &str = "idf/willow-build/idf_component.yml";
     const PARTITIONS: &str = "partitions_willow.csv";
     const SDKCONFIG_DEFAULTS: &str = "sdkconfig.defaults";
 

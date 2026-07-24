@@ -30,7 +30,10 @@ esp_idf_sdkconfig = "sdkconfig"
 esp_idf_sdkconfig_defaults = ["sdkconfig.defaults"]
 esp_idf_tools_install_dir = "fromenv"
 esp_idf_version = "tag:v5.3.4"
-esp_idf_components = ["main"]
+esp_idf_components = ["main", "willow-build"]
+
+[[package.metadata.esp-idf-sys.extra_components]]
+component_dirs = ["idf/willow-build"]
 
 [[package.metadata.esp-idf-sys.extra_components]]
 bindings_header = "bindings.h"

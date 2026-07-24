@@ -115,6 +115,6 @@ direct_dependencies:
 - espressif/esp_websocket_client
 - espressif/nghttp
 - idf
-manifest_hash: 5d6a2515db572508c0ebb27d77f72d891261cb749f6955a66ccd02e31f3fed3e
+manifest_hash: 7df150c913e7908262c25f1e9eb4217c402e8da9a70b88e6c4a151e3b16e51d6
 target: esp32s3
 version: 2.0.0
