@@ -9,3 +9,17 @@ Many users across various forums, social media, etc are starting to receive thei
 # Documentation
 
 Visit official documentation on [heywillow.io](https://heywillow.io).
+
+## M5Stack CoreS3
+
+Select the CoreS3 hardware and its quad-PSRAM defaults for both configuration
+and builds with `WILLOW_BOARD=m5stack-cores3`:
+
+```sh
+WILLOW_BOARD=m5stack-cores3 ./utils.sh config
+WILLOW_BOARD=m5stack-cores3 ./utils.sh build
+```
+
+The generated CoreS3 configuration is kept separately from the default
+ESP32-S3-BOX-3 configuration, so the two targets can retain different Wi-Fi
+and Willow Application Server settings.

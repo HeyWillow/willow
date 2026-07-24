@@ -20,6 +20,8 @@ use esp_idf_sys::{
 };
 use log::{debug, error, info};
 
+use crate::system::{self, Hardware};
+
 const DEFAULT_BRIGHTNESS: u32 = 700;
 const DEFAULT_DISPLAY_TIMEOUT_SECS: u32 = 10;
 const DISPLAY_TIMER_STACK_SIZE: usize = 4_096;
@@ -106,6 +108,23 @@ pub(crate) fn initialize() -> Result<(), EspError> {
         .and_then(|configuration| configuration.lcd_brightness)
         .map_or(DEFAULT_BRIGHTNESS, u32::from);
     let backlight = duties(brightness)?;
+
+    if system::hardware() == Hardware::M5StackCoreS3 {
+        debug!(
+            target: LOG_TARGET,
+            "CoreS3 AXP2101 backlight on={} off={} maximum={}",
+            backlight.on,
+            backlight.off,
+            backlight.maximum
+        );
+        crate::core_s3::set_backlight(backlight.on).map_err(|error| {
+            error!(target: LOG_TARGET, "failed to initialize CoreS3 display backlight: {error}");
+            EspError::from_infallible::<ESP_FAIL>()
+        })?;
+        return BACKLIGHT
+            .set(backlight)
+            .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
+    }
 
     debug!(
         target: LOG_TARGET,
@@ -266,6 +285,13 @@ pub(crate) fn set(on: bool, maximum: bool) {
     } else {
         backlight.off
     };
+
+    if system::hardware() == Hardware::M5StackCoreS3 {
+        if let Err(error) = crate::core_s3::set_backlight(duty) {
+            error!(target: LOG_TARGET, "failed to set CoreS3 display backlight: {error}");
+        }
+        return;
+    }
 
     let _ = check(
         unsafe {

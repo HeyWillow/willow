@@ -8,6 +8,7 @@
 
 #include "esp_codec_dev.h"
 #include "esp_codec_dev_defaults.h"
+#include "aw88298_dac.h"
 #include "es7210_adc.h"
 #include "es7243e_adc.h"
 #include "es8156_dac.h"

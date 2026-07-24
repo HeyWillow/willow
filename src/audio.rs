@@ -162,7 +162,7 @@ pub(crate) fn initialize() -> Result<(), AudioStartError> {
         .map_err(|source| AudioStartError::stage("microphone gain setup failed", &source))?;
     let microphone = Arc::new(Mutex::new(microphone));
     let DuplexChannels { receive, transmit } = DuplexChannels::new()
-        .map_err(|source| AudioStartError::stage("I2S0 startup failed", &source))?;
+        .map_err(|source| AudioStartError::stage("I2S startup failed", &source))?;
     let record_buffer = RecordBuffer::new(record_buffer_bytes, WIS_SESSION_BACKLOG_BYTES)
         .map_err(|source| AudioStartError::stage("recorder buffer startup failed", &source))?;
     let upload = UploadWorker::start(record_buffer.clone())

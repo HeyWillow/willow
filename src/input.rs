@@ -17,6 +17,8 @@ use esp_idf_svc::hal::{
 use esp_idf_sys::{ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, EspError, gpio_num_t_GPIO_NUM_1};
 use log::{debug, error, info};
 
+use crate::system::{self, Hardware};
+
 const INPUT_MONITOR_STACK_SIZE: usize = 3_072;
 const LONG_PRESS_DURATION: Duration = Duration::from_secs(2);
 const LOG_TARGET: &str = "WILLOW/INPUT";
@@ -43,6 +45,10 @@ impl Drop for UnmuteMonitor {
 
 /// Configures GPIO1 as the active-low mute input and retains its driver.
 pub fn init() -> Result<(), EspError> {
+    if system::hardware() == Hardware::M5StackCoreS3 {
+        debug!(target: LOG_TARGET, "CoreS3 has no hardware mute input");
+        return Ok(());
+    }
     if MUTE_INPUT.get().is_some() {
         return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
     }
@@ -62,6 +68,9 @@ pub fn init() -> Result<(), EspError> {
 
 /// Reads the active-low hardware mute input.
 pub(crate) fn is_muted() -> Result<bool, EspError> {
+    if system::hardware() == Hardware::M5StackCoreS3 {
+        return Ok(false);
+    }
     let input = MUTE_INPUT
         .get()
         .ok_or_else(EspError::from_infallible::<ESP_ERR_INVALID_STATE>)?;
@@ -111,6 +120,12 @@ pub(crate) fn start_unmute_monitor(
     mut unmuted: impl FnMut() + Send + 'static,
 ) -> Result<UnmuteMonitor, io::Error> {
     let shutdown = Arc::new(AtomicBool::new(false));
+    if system::hardware() == Hardware::M5StackCoreS3 {
+        return Ok(UnmuteMonitor {
+            shutdown,
+            thread: None,
+        });
+    }
     let monitor_shutdown = Arc::clone(&shutdown);
     let thread = thread::Builder::new()
         .name("mute_input".into())

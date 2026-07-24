@@ -9,6 +9,8 @@ flags
 generated_*.h
 managed_components
 sdkconfig
+sdkconfig.m5stack_core_s3
+sdkconfig.m5stack_core_s3.old
 sdkconfig.old
 serve
 target

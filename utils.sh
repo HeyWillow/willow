@@ -127,6 +127,23 @@ activate_rust() {
     fi
 }
 
+configure_board() {
+    case "${WILLOW_BOARD:-}" in
+    "")
+        ;;
+    m5stack-cores3|m5stack_core_s3)
+        export ESP_IDF_SDKCONFIG="sdkconfig.m5stack_core_s3"
+        export ESP_IDF_SDKCONFIG_DEFAULTS="sdkconfig.defaults;sdkconfig.defaults.m5stack_core_s3"
+        export SDKCONFIG="$WILLOW_PATH/sdkconfig.m5stack_core_s3"
+        export SDKCONFIG_DEFAULTS="$WILLOW_PATH/sdkconfig.defaults;$WILLOW_PATH/sdkconfig.defaults.m5stack_core_s3"
+        ;;
+    *)
+        echo "Unsupported WILLOW_BOARD '$WILLOW_BOARD'"
+        exit 1
+        ;;
+    esac
+}
+
 ensure_rust() {
     check_container
 
@@ -266,9 +283,10 @@ clean_cargo_build() {
 }
 
 generate_nvs() {
-    SSID=$(grep CONFIG_WIFI_SSID sdkconfig | cut -d'=' -f2 | tr -d '"')
-    PASSWORD=$(grep CONFIG_WIFI_PASSWORD sdkconfig | cut -d'=' -f2 | tr -d '"')
-    WAS_URL=$(grep CONFIG_WILLOW_WAS_URL sdkconfig | cut -d'=' -f2 | tr -d '"')
+    local active_sdkconfig="${SDKCONFIG:-sdkconfig}"
+    SSID=$(grep CONFIG_WIFI_SSID "$active_sdkconfig" | cut -d'=' -f2 | tr -d '"')
+    PASSWORD=$(grep CONFIG_WIFI_PASSWORD "$active_sdkconfig" | cut -d'=' -f2 | tr -d '"')
+    WAS_URL=$(grep CONFIG_WILLOW_WAS_URL "$active_sdkconfig" | cut -d'=' -f2 | tr -d '"')
     echo -n "key,type,encoding,value
 WAS,namespace,,
 URL,data,string,$WAS_URL
@@ -294,6 +312,8 @@ destroy() {
 
 # Just in case
 mkdir -p flags
+
+configure_board
 
 check_flag() {
     FLAG="$1"
@@ -327,7 +347,14 @@ case $1 in
 
 config)
     check_container
-    WILLOW_CARGO_FIRST=1 idf.py menuconfig
+    if [ "$WILLOW_BOARD" ]; then
+        WILLOW_CARGO_FIRST=1 idf.py \
+            "-DSDKCONFIG=$SDKCONFIG" \
+            "-DSDKCONFIG_DEFAULTS=$SDKCONFIG_DEFAULTS" \
+            menuconfig
+    else
+        WILLOW_CARGO_FIRST=1 idf.py menuconfig
+    fi
 ;;
 
 clean)

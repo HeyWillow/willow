@@ -18,6 +18,15 @@ if(NOT DEFINED ENV{WILLOW_CARGO_FIRST})
     message(FATAL_ERROR "Willow firmware must be built through Cargo")
 endif()
 
+if(DEFINED ENV{WILLOW_BOARD})
+    if(($ENV{WILLOW_BOARD} STREQUAL "m5stack-cores3" OR
+        $ENV{WILLOW_BOARD} STREQUAL "m5stack_core_s3") AND
+       NOT CONFIG_M5STACK_CORE_S3_BOARD)
+        message(FATAL_ERROR
+            "WILLOW_BOARD requests M5Stack CoreS3, but sdkconfig selects another board")
+    endif()
+endif()
+
 spiffs_create_partition_image(user ../../spiffs/user FLASH_IN_PROJECT)
 
 # ESP-SR 1.9.5 packs models in filesystem traversal order. Repack the staged

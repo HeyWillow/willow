@@ -6,10 +6,13 @@ use esp_idf_sys::EspError;
 
 use crate::i2c::I2cDevice;
 
+use super::board::Es7210Profile;
+
 const ADDRESS: u16 = 0x40;
 const BUS_SPEED_HZ: u32 = 100_000;
 const BUS_TIMEOUT_MS: i32 = 100;
 const BOX3_GAIN_CODE: u8 = 0x0e;
+const CORE_S3_GAIN_CODE: u8 = 0x0b;
 
 const RESET: u8 = 0x00;
 const CLOCK_OFF: u8 = 0x01;
@@ -127,8 +130,18 @@ impl Es7210 {
         Ok(Self { bus })
     }
 
-    /// Applies and verifies Willow's proven BOX-3 microphone configuration.
-    pub(super) fn initialize_box3(&mut self) -> Result<Es7210Snapshot, CodecError> {
+    /// Applies and verifies the selected board's microphone configuration.
+    pub(super) fn initialize(
+        &mut self,
+        profile: Es7210Profile,
+    ) -> Result<Es7210Snapshot, CodecError> {
+        match profile {
+            Es7210Profile::Box3 => self.initialize_box3(),
+            Es7210Profile::CoreS3 => self.initialize_core_s3(),
+        }
+    }
+
+    fn initialize_box3(&mut self) -> Result<Es7210Snapshot, CodecError> {
         // This is Willow's known BOX-3 sequence, specialized directly to its
         // final 16 kHz, 32-bit, MIC1|MIC2|MIC3 configuration.
         self.write(RESET, 0xff)?;
@@ -164,12 +177,60 @@ impl Es7210 {
         Ok(snapshot)
     }
 
+    fn initialize_core_s3(&mut self) -> Result<Es7210Snapshot, CodecError> {
+        // M5Stack's CoreS3 sequence selects its two physical microphones. Use
+        // 32-bit Philips slots so capture retains Willow's common framing.
+        for (register, value) in [
+            (RESET, 0xff),
+            (RESET, 0x41),
+            (CLOCK_OFF, 0x1f),
+            (0x06, 0x00),
+            (OSR, 0x20),
+            (MODE_CONFIG, 0x10),
+            (TIME_CONTROL_0, 0x30),
+            (TIME_CONTROL_1, 0x30),
+            (ADC34_HPF_2, 0x0a),
+            (ADC34_HPF_1, 0x2a),
+            (ADC12_HPF_1, 0x0a),
+            (ADC12_HPF_2, 0x2a),
+            (MAIN_CLOCK, 0xc1),
+            (LRCLK_DIV_HIGH, 0x01),
+            (LRCLK_DIV_LOW, 0x00),
+            (SERIAL_INTERFACE_1, 0x80),
+            (SERIAL_INTERFACE_2, 0x00),
+            (ANALOG, 0x42),
+            (MIC12_BIAS, 0x70),
+            (MIC34_BIAS, 0x70),
+            (MIC1_GAIN, 0x10 | CORE_S3_GAIN_CODE),
+            (MIC2_GAIN, 0x10 | CORE_S3_GAIN_CODE),
+            (MIC3_GAIN, 0x00),
+            (MIC4_GAIN, 0x00),
+            (MIC12_POWER, 0x00),
+            (MIC34_POWER, 0xff),
+            (CLOCK_OFF, 0x14),
+        ] {
+            self.write(register, value)?;
+        }
+
+        let snapshot = self.snapshot()?;
+        Self::verify_core_s3_snapshot(snapshot)?;
+        Ok(snapshot)
+    }
+
     /// Applies Willow's configured ES7210 gain code and verifies every
     /// selected microphone register.
-    pub(super) fn set_gain(&mut self, gain: u8) -> Result<(), CodecError> {
-        let gain = gain.min(BOX3_GAIN_CODE);
-        self.set_selected_gain(gain)?;
-        for register in [MIC1_GAIN, MIC2_GAIN, MIC3_GAIN] {
+    pub(super) fn set_gain(&mut self, profile: Es7210Profile, gain: u8) -> Result<(), CodecError> {
+        let (gain, registers) = match profile {
+            Es7210Profile::Box3 => (
+                gain.min(BOX3_GAIN_CODE),
+                &[MIC1_GAIN, MIC2_GAIN, MIC3_GAIN][..],
+            ),
+            Es7210Profile::CoreS3 => (gain.min(CORE_S3_GAIN_CODE), &[MIC1_GAIN, MIC2_GAIN][..]),
+        };
+        for &register in registers {
+            self.update(register, 0x0f, gain)?;
+        }
+        for &register in registers {
             let actual = self.read(register)?;
             if actual & 0x0f != gain {
                 return Err(CodecError::Readback {
@@ -280,6 +341,49 @@ impl Es7210 {
             (MIC4_GAIN, snapshot.mic4_gain, 0x10, 0x00),
             (MIC12_POWER, snapshot.mic12_power, 0xff, 0x00),
             (MIC34_POWER, snapshot.mic34_power, 0xff, 0x00),
+        ] {
+            if actual & mask != expected & mask {
+                return Err(CodecError::Readback {
+                    register,
+                    mask,
+                    expected,
+                    actual,
+                });
+            }
+        }
+        Ok(())
+    }
+
+    fn verify_core_s3_snapshot(snapshot: Es7210Snapshot) -> Result<(), CodecError> {
+        for (register, actual, mask, expected) in [
+            (RESET, snapshot.reset, 0xff, 0x41),
+            (CLOCK_OFF, snapshot.clock_off, 0xff, 0x14),
+            (MAIN_CLOCK, snapshot.main_clock, 0xff, 0xc1),
+            (LRCLK_DIV_HIGH, snapshot.lrclk_div_high, 0xff, 0x01),
+            (LRCLK_DIV_LOW, snapshot.lrclk_div_low, 0xff, 0x00),
+            (OSR, snapshot.osr, 0xff, 0x20),
+            (MODE_CONFIG, snapshot.mode_config, 0xff, 0x10),
+            (SERIAL_INTERFACE_1, snapshot.serial_interface_1, 0xff, 0x80),
+            (SERIAL_INTERFACE_2, snapshot.serial_interface_2, 0xff, 0x00),
+            (ANALOG, snapshot.analog, 0xff, 0x42),
+            (MIC12_BIAS, snapshot.mic12_bias, 0xff, 0x70),
+            (MIC34_BIAS, snapshot.mic34_bias, 0xff, 0x70),
+            (
+                MIC1_GAIN,
+                snapshot.mic1_gain,
+                0x1f,
+                0x10 | CORE_S3_GAIN_CODE,
+            ),
+            (
+                MIC2_GAIN,
+                snapshot.mic2_gain,
+                0x1f,
+                0x10 | CORE_S3_GAIN_CODE,
+            ),
+            (MIC3_GAIN, snapshot.mic3_gain, 0x1f, 0x00),
+            (MIC4_GAIN, snapshot.mic4_gain, 0x1f, 0x00),
+            (MIC12_POWER, snapshot.mic12_power, 0xff, 0x00),
+            (MIC34_POWER, snapshot.mic34_power, 0xff, 0xff),
         ] {
             if actual & mask != expected & mask {
                 return Err(CodecError::Readback {

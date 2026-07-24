@@ -9,11 +9,12 @@ const MAXIMUM_RESTART_DELAY_SECONDS: u32 = 6;
 const MINIMUM_RESTART_DELAY_SECONDS: u32 = 3;
 const RESTART_DELAY_RANGE: u32 = 9;
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Eq, PartialEq)]
 pub(crate) enum Hardware {
     Esp32S3Box,
     Esp32S3Box3,
     Esp32S3BoxLite,
+    M5StackCoreS3,
     Unsupported,
 }
 
@@ -23,6 +24,8 @@ const HARDWARE: Hardware = if cfg!(esp_idf_esp32_s3_box_board) {
     Hardware::Esp32S3BoxLite
 } else if cfg!(esp_idf_esp32_s3_box_3_board) {
     Hardware::Esp32S3Box3
+} else if cfg!(esp_idf_m5stack_core_s3_board) {
+    Hardware::M5StackCoreS3
 } else {
     Hardware::Unsupported
 };
@@ -33,6 +36,7 @@ impl Hardware {
             Self::Esp32S3Box => "ESP32-S3-BOX",
             Self::Esp32S3Box3 => "ESP32-S3-BOX-3",
             Self::Esp32S3BoxLite => "ESP32-S3-BOX-Lite",
+            Self::M5StackCoreS3 => "M5Stack CoreS3",
             Self::Unsupported => "HW-UNSUPPORTED",
         }
     }

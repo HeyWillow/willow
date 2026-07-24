@@ -41,8 +41,9 @@ use esp_idf_sys::{
     esp_lcd_panel_draw_bitmap, esp_lcd_panel_io_del, esp_lcd_panel_io_handle_t,
     esp_lcd_panel_io_i2c_config_t, esp_lcd_panel_io_tx_param, esp_lcd_touch_config_t,
     esp_lcd_touch_del, esp_lcd_touch_get_coordinates, esp_lcd_touch_handle_t,
-    esp_lcd_touch_new_i2c_gt911, esp_lcd_touch_new_i2c_tt21100, esp_lcd_touch_read_data,
-    gpio_num_t_GPIO_NUM_3, gpio_num_t_GPIO_NUM_NC, heap_caps_free, heap_caps_malloc,
+    esp_lcd_touch_new_i2c_ft5x06, esp_lcd_touch_new_i2c_gt911, esp_lcd_touch_new_i2c_tt21100,
+    esp_lcd_touch_read_data, gpio_num_t_GPIO_NUM_3, gpio_num_t_GPIO_NUM_NC, heap_caps_free,
+    heap_caps_malloc,
 };
 use log::{debug, error, info};
 use rusttype::{Font, Scale, point};
@@ -54,6 +55,7 @@ const CANCEL_Y: i32 = 198 + UI_Y_OFFSET;
 const DISPLAY_HEIGHT: usize = 240;
 const DISPLAY_WIDTH: usize = 320;
 const FONT_SIZE: u32 = 28;
+const FT5X06_ADDRESS: u16 = 0x38;
 const GT911_ADDRESS: u16 = 0x5d;
 const GT911_BACKUP_ADDRESS: u16 = 0x14;
 const LOG_TARGET: &str = "WILLOW/UI";
@@ -760,6 +762,7 @@ fn render_worker(
 }
 
 enum TouchController {
+    Ft5x06,
     Gt911,
     Tt21100,
 }
@@ -776,13 +779,19 @@ impl Touch {
             return Ok(None);
         }
 
-        let (controller, address) = if crate::i2c::probe(GT911_ADDRESS) == ESP_OK {
-            (TouchController::Gt911, GT911_ADDRESS)
+        let detected = if cfg!(esp_idf_m5stack_core_s3_board) {
+            (crate::i2c::probe(FT5X06_ADDRESS) == ESP_OK)
+                .then_some((TouchController::Ft5x06, FT5X06_ADDRESS))
+        } else if crate::i2c::probe(GT911_ADDRESS) == ESP_OK {
+            Some((TouchController::Gt911, GT911_ADDRESS))
         } else if crate::i2c::probe(GT911_BACKUP_ADDRESS) == ESP_OK {
-            (TouchController::Gt911, GT911_BACKUP_ADDRESS)
+            Some((TouchController::Gt911, GT911_BACKUP_ADDRESS))
         } else if crate::i2c::probe(TT21100_ADDRESS) == ESP_OK {
-            (TouchController::Tt21100, TT21100_ADDRESS)
+            Some((TouchController::Tt21100, TT21100_ADDRESS))
         } else {
+            None
+        };
+        let Some((controller, address)) = detected else {
             error!(target: LOG_TARGET, "touch screen not detected");
             return Err(EspError::from_infallible::<ESP_FAIL>());
         };
@@ -791,16 +800,26 @@ impl Touch {
             target: LOG_TARGET,
             "detected {} touch controller at 0x{address:02x}",
             match controller {
+                TouchController::Ft5x06 => "FT5x06",
                 TouchController::Gt911 => "GT911",
                 TouchController::Tt21100 => "TT21100",
             }
         );
 
+        let command_bits = if matches!(controller, TouchController::Ft5x06) {
+            8
+        } else {
+            16
+        };
         let mut io_configuration = esp_lcd_panel_io_i2c_config_t {
             dev_addr: u32::from(address),
             control_phase_bytes: 1,
-            lcd_cmd_bits: 16,
-            scl_speed_hz: 400_000,
+            lcd_cmd_bits: command_bits,
+            scl_speed_hz: if matches!(controller, TouchController::Ft5x06) {
+                100_000
+            } else {
+                400_000
+            },
             ..Default::default()
         };
         io_configuration.flags.set_disable_control_phase(1);
@@ -821,7 +840,11 @@ impl Touch {
             x_max: DISPLAY_WIDTH as u16,
             y_max: DISPLAY_HEIGHT as u16,
             rst_gpio_num: gpio_num_t_GPIO_NUM_NC,
-            int_gpio_num: gpio_num_t_GPIO_NUM_3,
+            int_gpio_num: if cfg!(esp_idf_m5stack_core_s3_board) {
+                gpio_num_t_GPIO_NUM_NC
+            } else {
+                gpio_num_t_GPIO_NUM_3
+            },
             ..Default::default()
         };
         if matches!(controller, TouchController::Tt21100) {
@@ -830,6 +853,9 @@ impl Touch {
 
         let mut handle = ptr::null_mut();
         let result = match controller {
+            TouchController::Ft5x06 => unsafe {
+                esp_lcd_touch_new_i2c_ft5x06(io, &raw const touch_configuration, &raw mut handle)
+            },
             TouchController::Gt911 => unsafe {
                 esp_lcd_touch_new_i2c_gt911(io, &raw const touch_configuration, &raw mut handle)
             },

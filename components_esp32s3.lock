@@ -1,4 +1,14 @@
 dependencies:
+  espressif/cmake_utilities:
+    component_hash: 351350613ceafba240b761b4ea991e0f231ac7a9f59a9ee901f751bddc0bb18f
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.1'
+    source:
+      registry_url: https://components.espressif.com
+      type: service
+    version: 0.5.3
   espressif/esp-dsp:
     component_hash: 3e7bbd487f1357a1d4944d0c85966d049501ea281b8a4c7f93f7cfedd5b7f23d
     dependencies:
@@ -43,6 +53,20 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.5.9
+  espressif/esp_lcd_ili9341:
+    component_hash: 31f1b793aa2110dd2ae071c21ccbff0a4eb20d9a4ee40b6294c0dc0ad9552c4e
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    - name: espressif/cmake_utilities
+      registry_url: https://components.espressif.com
+      require: private
+      version: 0.*
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.2.0
   espressif/esp_lcd_touch:
     component_hash: 3f85a7d95af876f1a6ecca8eb90a81614890d0f03a038390804e5a77e2caf862
     dependencies:
@@ -53,6 +77,20 @@ dependencies:
       registry_url: https://components.espressif.com
       type: service
     version: 1.2.1
+  espressif/esp_lcd_touch_ft5x06:
+    component_hash: abaec05f46a793549b60afdda9eff86e3c8e87782c8c169007911232388d2858
+    dependencies:
+    - name: espressif/esp_lcd_touch
+      registry_url: https://components.espressif.com
+      require: public
+      version: ^1.0.4
+    - name: idf
+      require: private
+      version: '>=4.4.2'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.0.7
   espressif/esp_lcd_touch_gt911:
     component_hash: acc1c184358aa29ef72506f618c9c76a8cc2bf12af38a2bff3d44d84f3a08857
     dependencies:
@@ -110,11 +148,13 @@ direct_dependencies:
 - espressif/esp-sr
 - espressif/esp_audio_codec
 - espressif/esp_codec_dev
+- espressif/esp_lcd_ili9341
+- espressif/esp_lcd_touch_ft5x06
 - espressif/esp_lcd_touch_gt911
 - espressif/esp_lcd_touch_tt21100
 - espressif/esp_websocket_client
 - espressif/nghttp
 - idf
-manifest_hash: 7df150c913e7908262c25f1e9eb4217c402e8da9a70b88e6c4a151e3b16e51d6
+manifest_hash: e8aabc9dabe3c8459d3ffed70f6329afee5724afc76b59ac24af4c9d9884e74a
 target: esp32s3
 version: 2.0.0

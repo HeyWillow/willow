@@ -1,8 +1,9 @@
-//! Willow voice-assistant firmware for the ESP32-S3-BOX family.
+//! Willow voice-assistant firmware for supported ESP32-S3 voice terminals.
 
 mod audio;
 mod backlight;
 mod config;
+mod core_s3;
 #[cfg(esp_idf_mbedtls_ssl_proto_tls1_3)]
 mod crypto;
 mod display;
@@ -39,6 +40,17 @@ fn take_system_event_loop() -> EspSystemEventLoop {
     }
 }
 
+fn initialize_board() {
+    if let Err(error) = i2c::init() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize I2C0 master bus: {error}");
+        unsafe { esp_idf_sys::esp_system_abort(c"I2C0 initialization failed".as_ptr()) }
+    }
+    if let Err(error) = core_s3::initialize() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize CoreS3 board hardware: {error}");
+        unsafe { esp_idf_sys::esp_system_abort(c"CoreS3 initialization failed".as_ptr()) }
+    }
+}
+
 fn main() {
     esp_idf_sys::link_patches();
     let log_filter = logging::initialize();
@@ -65,6 +77,11 @@ fn main() {
         }
     }
     config::load();
+
+    // CoreS3 display, touch, and audio power/reset controls share the system
+    // I2C bus. Initialize the bus and board rails before any of them start.
+    initialize_board();
+
     if let Err(error) = display::initialize() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize display: {error}");
     }
@@ -77,10 +94,6 @@ fn main() {
         unsafe { esp_idf_sys::vTaskDelay(u32::MAX) }
     }
 
-    if let Err(error) = i2c::init() {
-        log::error!(target: "WILLOW/MAIN", "failed to initialize I2C0 master bus: {error}");
-        unsafe { esp_idf_sys::esp_system_abort(c"I2C0 initialization failed".as_ptr()) }
-    }
     if let Err(error) = input::init() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }

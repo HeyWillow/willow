@@ -13,6 +13,9 @@ config ESP32_S3_BOX_LITE_BOARD
 config ESP32_S3_BOX_3_BOARD
     bool "ESP32-S3-BOX-3"
 
+config M5STACK_CORE_S3_BOARD
+    bool "M5Stack CoreS3"
+
 endchoice
 
 config WIFI_SSID

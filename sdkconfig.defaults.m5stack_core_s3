@@ -1,0 +1,6 @@
+# CoreS3 uses external quad-SPI PSRAM rather than the BOX-3 octal part.
+# CONFIG_ESP32_S3_BOX_3_BOARD is not set
+CONFIG_M5STACK_CORE_S3_BOARD=y
+# CONFIG_SPIRAM_ECC_ENABLE is not set
+# CONFIG_SPIRAM_MODE_OCT is not set
+CONFIG_SPIRAM_MODE_QUAD=y

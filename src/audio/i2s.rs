@@ -1,4 +1,4 @@
-//! Joint ownership of the full-duplex I2S0 capture and playback channels.
+//! Joint ownership of the board's full-duplex I2S capture and playback channels.
 
 use core::{ffi::c_void, fmt, ptr, ptr::NonNull};
 
@@ -8,11 +8,10 @@ use esp_idf_sys::{
     i2s_channel_get_info, i2s_channel_init_std_mode, i2s_channel_obj_t, i2s_channel_read,
     i2s_channel_write, i2s_comm_mode_t_I2S_COMM_MODE_STD,
     i2s_data_bit_width_t_I2S_DATA_BIT_WIDTH_32BIT, i2s_del_channel, i2s_dir_t_I2S_DIR_RX,
-    i2s_dir_t_I2S_DIR_TX, i2s_mclk_multiple_t_I2S_MCLK_MULTIPLE_256, i2s_new_channel,
-    i2s_port_t_I2S_NUM_0, i2s_role_t_I2S_ROLE_MASTER,
-    i2s_slot_bit_width_t_I2S_SLOT_BIT_WIDTH_32BIT, i2s_slot_mode_t_I2S_SLOT_MODE_STEREO,
-    i2s_std_clk_config_t, i2s_std_config_t, i2s_std_gpio_config_t,
-    i2s_std_gpio_config_t__bindgen_ty_1, i2s_std_slot_config_t,
+    i2s_dir_t_I2S_DIR_TX, i2s_mclk_multiple_t_I2S_MCLK_MULTIPLE_256, i2s_new_channel, i2s_port_t,
+    i2s_role_t_I2S_ROLE_MASTER, i2s_slot_bit_width_t_I2S_SLOT_BIT_WIDTH_32BIT,
+    i2s_slot_mode_t_I2S_SLOT_MODE_STEREO, i2s_std_clk_config_t, i2s_std_config_t,
+    i2s_std_gpio_config_t, i2s_std_gpio_config_t__bindgen_ty_1, i2s_std_slot_config_t,
     i2s_std_slot_mask_t_I2S_STD_SLOT_BOTH, soc_periph_i2s_clk_src_t_I2S_CLK_SRC_DEFAULT,
 };
 use log::error;
@@ -97,16 +96,16 @@ impl fmt::Display for I2sError {
                 transmit_missing,
             } => write!(
                 formatter,
-                "joint I2S0 allocation returned missing handles: RX missing={receive_missing}, TX missing={transmit_missing}"
+                "joint I2S allocation returned missing handles: RX missing={receive_missing}, TX missing={transmit_missing}"
             ),
             Self::UnexpectedChannelPair { receive, transmit } => write!(
                 formatter,
-                "I2S0 allocation did not produce the required full-duplex STD pair: RX={receive:?}, TX={transmit:?}"
+                "I2S allocation did not produce the required full-duplex STD pair: RX={receive:?}, TX={transmit:?}"
             ),
             Self::ChannelNotEnabled { direction } => {
                 write!(
                     formatter,
-                    "I2S0 {} transfer requested before enable",
+                    "I2S {} transfer requested before enable",
                     direction.name()
                 )
             }
@@ -116,11 +115,11 @@ impl fmt::Display for I2sError {
                 reported,
             } => write!(
                 formatter,
-                "I2S0 {} reported {reported} bytes for a {requested}-byte buffer",
+                "I2S {} reported {reported} bytes for a {requested}-byte buffer",
                 direction.name()
             ),
             Self::UnsupportedHardware => {
-                formatter.write_str("the selected hardware has no I2S0 configuration")
+                formatter.write_str("the selected hardware has no I2S configuration")
             }
         }
     }
@@ -161,8 +160,8 @@ impl Channel {
 
     fn initialize(&self, configuration: &i2s_std_config_t) -> Result<(), I2sError> {
         let operation = match self.direction {
-            Direction::Receive => "initialize I2S0 RX in standard mode",
-            Direction::Transmit => "initialize I2S0 TX in standard mode",
+            Direction::Receive => "initialize I2S RX in standard mode",
+            Direction::Transmit => "initialize I2S TX in standard mode",
         };
         // SAFETY: this owner holds a live registered channel, and ESP-IDF
         // copies the complete standard-mode configuration synchronously.
@@ -176,8 +175,8 @@ impl Channel {
             return Ok(());
         }
         let operation = match self.direction {
-            Direction::Receive => "enable I2S0 RX",
-            Direction::Transmit => "enable I2S0 TX",
+            Direction::Receive => "enable I2S RX",
+            Direction::Transmit => "enable I2S TX",
         };
         // SAFETY: this owner contains a live READY channel and serializes its
         // state transitions through an exclusive mutable borrow.
@@ -191,8 +190,8 @@ impl Channel {
             return Ok(());
         }
         let operation = match self.direction {
-            Direction::Receive => "disable I2S0 RX",
-            Direction::Transmit => "disable I2S0 TX",
+            Direction::Receive => "disable I2S RX",
+            Direction::Transmit => "disable I2S TX",
         };
         // SAFETY: this owner contains a live RUNNING channel and serializes
         // its state transitions through an exclusive mutable borrow.
@@ -219,7 +218,7 @@ impl Drop for Channel {
         if let Err(source) = self.disable() {
             error!(
                 target: LOG_TARGET,
-                "failed to disable I2S0 {} during cleanup: {source}",
+                "failed to disable I2S {} during cleanup: {source}",
                 self.direction.name()
             );
         }
@@ -229,7 +228,7 @@ impl Drop for Channel {
         if let Some(source) = EspError::from(unsafe { i2s_del_channel(self.handle()) }) {
             error!(
                 target: LOG_TARGET,
-                "failed to delete I2S0 {} channel: {source}",
+                "failed to delete I2S {} channel: {source}",
                 self.direction.name()
             );
         }
@@ -272,7 +271,7 @@ impl ReceiveChannel {
         if result == ESP_ERR_TIMEOUT && bytes_read > 0 {
             return self.0.validate_transfer(destination.len(), bytes_read);
         }
-        hal_result("read I2S0 RX", result)?;
+        hal_result("read I2S RX", result)?;
         self.0.validate_transfer(destination.len(), bytes_read)
     }
 }
@@ -309,7 +308,7 @@ impl TransmitChannel {
         if result == ESP_ERR_TIMEOUT && bytes_written > 0 {
             return self.0.validate_transfer(source.len(), bytes_written);
         }
-        hal_result("write I2S0 TX", result)?;
+        hal_result("write I2S TX", result)?;
         self.0.validate_transfer(source.len(), bytes_written)
     }
 }
@@ -322,10 +321,10 @@ pub(super) struct DuplexChannels {
 }
 
 impl DuplexChannels {
-    /// Allocates and verifies one paired full-duplex I2S0 controller.
+    /// Allocates and verifies one paired full-duplex I2S controller.
     pub(super) fn new() -> Result<Self, I2sError> {
         let board = board::selected().ok_or(I2sError::UnsupportedHardware)?;
-        let channel_configuration = channel_configuration();
+        let channel_configuration = channel_configuration(board.i2s_port);
         let standard_configuration = standard_configuration(board.i2s);
         let mut transmit_handle = ptr::null_mut();
         let mut receive_handle = ptr::null_mut();
@@ -343,7 +342,7 @@ impl DuplexChannels {
             delete_unowned_channel(Direction::Receive, receive_handle);
             delete_unowned_channel(Direction::Transmit, transmit_handle);
             return Err(I2sError::Hal {
-                operation: "allocate paired I2S0 RX and TX channels",
+                operation: "allocate paired I2S RX and TX channels",
                 source,
             });
         }
@@ -364,7 +363,7 @@ impl DuplexChannels {
         // so initialize it before RX with the exact same framing and pins.
         channels.transmit.0.initialize(&standard_configuration)?;
         channels.receive.0.initialize(&standard_configuration)?;
-        channels.verify_pair()?;
+        channels.verify_pair(board.i2s_port)?;
         Ok(channels)
     }
 
@@ -372,11 +371,11 @@ impl DuplexChannels {
         DMA_DESCRIPTOR_COUNT * DMA_FRAMES_PER_DESCRIPTOR
     }
 
-    fn verify_pair(&self) -> Result<(), I2sError> {
-        let receive = channel_snapshot("query initialized I2S0 RX", self.receive.0.handle())?;
-        let transmit = channel_snapshot("query initialized I2S0 TX", self.transmit.0.handle())?;
-        let valid = receive.id == i2s_port_t_I2S_NUM_0
-            && transmit.id == i2s_port_t_I2S_NUM_0
+    fn verify_pair(&self, expected_port: i2s_port_t) -> Result<(), I2sError> {
+        let receive = channel_snapshot("query initialized I2S RX", self.receive.0.handle())?;
+        let transmit = channel_snapshot("query initialized I2S TX", self.transmit.0.handle())?;
+        let valid = receive.id == expected_port
+            && transmit.id == expected_port
             && receive.role == i2s_role_t_I2S_ROLE_MASTER
             && transmit.role == i2s_role_t_I2S_ROLE_MASTER
             && receive.direction == i2s_dir_t_I2S_DIR_RX
@@ -395,9 +394,9 @@ impl DuplexChannels {
     }
 }
 
-const fn channel_configuration() -> i2s_chan_config_t {
+const fn channel_configuration(port: i2s_port_t) -> i2s_chan_config_t {
     i2s_chan_config_t {
-        id: i2s_port_t_I2S_NUM_0,
+        id: port,
         role: i2s_role_t_I2S_ROLE_MASTER,
         dma_desc_num: DMA_DESCRIPTOR_COUNT,
         dma_frame_num: DMA_FRAMES_PER_DESCRIPTOR,
@@ -447,7 +446,7 @@ fn delete_unowned_channel(direction: Direction, handle: i2s_chan_handle_t) {
     if let Some(source) = EspError::from(unsafe { i2s_del_channel(handle) }) {
         error!(
             target: LOG_TARGET,
-            "failed to delete partially allocated I2S0 {} channel: {source}",
+            "failed to delete partially allocated I2S {} channel: {source}",
             direction.name()
         );
     }

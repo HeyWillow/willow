@@ -12,7 +12,7 @@ use log::error;
 use crate::i2c;
 
 use super::{
-    board::{self, BoardAudioConfiguration, MicrophoneCodec, PlaybackCodec},
+    board::{self, BoardAudioConfiguration, Es7210Profile, MicrophoneCodec, PlaybackCodec},
     codec_ffi::raw,
     es7210::{CodecError as Es7210Error, Es7210},
 };
@@ -352,15 +352,18 @@ impl Drop for CodecInterface {
 }
 
 pub(super) enum MicrophoneDevice {
-    Es7210(Es7210),
+    Es7210 {
+        codec: Es7210,
+        profile: Es7210Profile,
+    },
     Es7243e(CodecInterface),
 }
 
 impl MicrophoneDevice {
     pub(super) fn apply_gain(&mut self, gain: u8) -> Result<(), CodecError> {
         match self {
-            Self::Es7210(codec) => codec
-                .set_gain(gain)
+            Self::Es7210 { codec, profile } => codec
+                .set_gain(*profile, gain)
                 .map_err(|source| CodecError::Es7210 { source }),
             // Preserve the old ES7243E adapter, whose volume callback was a
             // no-op and therefore left the codec's +30 dB initialization.
@@ -370,12 +373,12 @@ impl MicrophoneDevice {
 
     pub(super) fn reinitialize(&mut self, gain: u8) -> Result<(), CodecError> {
         match self {
-            Self::Es7210(codec) => {
+            Self::Es7210 { codec, profile } => {
                 codec
-                    .initialize_box3()
+                    .initialize(*profile)
                     .map_err(|source| CodecError::Es7210 { source })?;
                 codec
-                    .set_gain(gain)
+                    .set_gain(*profile, gain)
                     .map_err(|source| CodecError::Es7210 { source })
             }
             Self::Es7243e(codec) => codec.reopen_es7243e(),
@@ -406,12 +409,12 @@ impl BoardCodecDevices {
 
 fn new_microphone(configuration: &BoardAudioConfiguration) -> Result<MicrophoneDevice, CodecError> {
     match configuration.microphone_codec {
-        MicrophoneCodec::Es7210 => {
+        MicrophoneCodec::Es7210(profile) => {
             let mut codec = Es7210::attach().map_err(|source| CodecError::Es7210 { source })?;
             codec
-                .initialize_box3()
+                .initialize(profile)
                 .map_err(|source| CodecError::Es7210 { source })?;
-            Ok(MicrophoneDevice::Es7210(codec))
+            Ok(MicrophoneDevice::Es7210 { codec, profile })
         }
         MicrophoneCodec::Es7243e => {
             let address = codec_address("ES7243E", raw::ES7243E_CODEC_DEFAULT_ADDR)?;
@@ -428,17 +431,40 @@ fn new_microphone(configuration: &BoardAudioConfiguration) -> Result<MicrophoneD
 }
 
 fn new_playback(configuration: &BoardAudioConfiguration) -> Result<CodecInterface, CodecError> {
-    let amplifier_pin = i16::try_from(configuration.amplifier_enable_gpio).map_err(|_| {
+    match configuration.playback_codec {
+        PlaybackCodec::Aw88298 => new_aw88298(),
+        PlaybackCodec::Es8156 => new_es8156(configuration, amplifier_pin(configuration)?),
+        PlaybackCodec::Es8311 => new_es8311(configuration, amplifier_pin(configuration)?),
+    }
+}
+
+fn amplifier_pin(configuration: &BoardAudioConfiguration) -> Result<i16, CodecError> {
+    i16::try_from(configuration.amplifier_enable_gpio).map_err(|_| {
         CodecError::InvalidAmplifierPin {
             codec: playback_name(configuration.playback_codec),
             pin: configuration.amplifier_enable_gpio,
         }
-    })?;
+    })
+}
 
-    match configuration.playback_codec {
-        PlaybackCodec::Es8156 => new_es8156(configuration, amplifier_pin),
-        PlaybackCodec::Es8311 => new_es8311(configuration, amplifier_pin),
-    }
+fn new_aw88298() -> Result<CodecInterface, CodecError> {
+    let address = codec_address("AW88298", raw::AW88298_CODEC_DEFAULT_ADDR)?;
+    let control = ControlInterface::new("AW88298", address)?;
+    let gpio = GpioInterface::new("AW88298")?;
+    let mut codec_configuration = raw::aw88298_codec_cfg_t {
+        ctrl_if: control.as_ptr(),
+        gpio_if: gpio.as_ptr(),
+        // CoreS3 reset is already released through the AW9523 expander.
+        reset_pin: -1,
+        hw_gain: raw::esp_codec_dev_hw_gain_t {
+            pa_gain: 15.0,
+            ..Default::default()
+        },
+    };
+    // SAFETY: both dependent interfaces remain live inside the resulting
+    // owner and the component copies the synchronous configuration.
+    let interface = unsafe { raw::aw88298_codec_new(&raw mut codec_configuration) };
+    CodecInterface::new("AW88298", interface, control, Some(gpio))
 }
 
 fn new_es8156(
@@ -495,6 +521,7 @@ fn codec_address(codec: &'static str, address: u32) -> Result<u8, CodecError> {
 
 const fn playback_name(codec: PlaybackCodec) -> &'static str {
     match codec {
+        PlaybackCodec::Aw88298 => "AW88298",
         PlaybackCodec::Es8156 => "ES8156",
         PlaybackCodec::Es8311 => "ES8311",
     }
