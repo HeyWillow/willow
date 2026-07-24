@@ -1,11 +1,20 @@
 //! Allocation-free PCM channel conversion, resampling, and I2S packing.
 
-use core::fmt;
+use core::{fmt, slice};
 
 const MAXIMUM_SAMPLE_RATE_HZ: u32 = 192_000;
 const MINIMUM_SAMPLE_RATE_HZ: u32 = 8_000;
 const OUTPUT_CHANNELS: usize = 2;
 pub(crate) const OUTPUT_SAMPLE_RATE_HZ: u32 = 16_000;
+
+/// Exposes aligned signed PCM storage to native decoders which write bytes.
+pub(super) fn i16_slice_as_bytes_mut(samples: &mut [i16]) -> &mut [u8] {
+    let length = core::mem::size_of_val(samples);
+    // SAFETY: u8 has alignment one, every bit pattern is valid for i16, and
+    // the byte slice covers exactly the live i16 slice for the duration of its
+    // exclusive borrow.
+    unsafe { slice::from_raw_parts_mut(samples.as_mut_ptr().cast(), length) }
+}
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ChannelCount {
@@ -257,6 +266,15 @@ fn write_i2s_frame(output: &mut [i32], frame: usize, samples: StereoFrame) {
     reason = "the firmware binary disables Cargo's test harness"
 )]
 mod tests {
+    #[test]
+    fn exposes_aligned_pcm_storage_as_writable_bytes() {
+        let mut samples = [0_i16; 2];
+        let bytes = super::i16_slice_as_bytes_mut(&mut samples);
+        bytes.copy_from_slice(&[0x34, 0x12, 0xfe, 0xff]);
+
+        assert_eq!(samples, [i16::from_ne_bytes([0x34, 0x12]), -2]);
+    }
+
     #[test]
     fn rejects_invalid_layouts() {
         assert_eq!(

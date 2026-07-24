@@ -11,7 +11,7 @@ use ogg::{
 use super::{
     i2s::{I2sError, TransmitChannel},
     ogg_headers::{self, OggCodec, PacketSizeTracker, PcmTrimmer},
-    pcm::{ConversionProgress, PcmConverter, PcmError},
+    pcm::{self, ConversionProgress, PcmConverter, PcmError},
     stream_codec::{CodecLibrary, DecodedAudioInfo, StreamCodecError, StreamDecoder, StreamFormat},
 };
 
@@ -239,7 +239,6 @@ impl PlaybackError {
 /// Caller-owned storage reused throughout one or more playback operations.
 pub(super) struct PlaybackWorkspace<'buffer> {
     encoded: &'buffer mut [u8],
-    decoded: &'buffer mut [u8],
     decoded_samples: &'buffer mut [i16],
     i2s_samples: &'buffer mut [i32],
 }
@@ -247,14 +246,12 @@ pub(super) struct PlaybackWorkspace<'buffer> {
 impl<'buffer> PlaybackWorkspace<'buffer> {
     pub(super) fn new(
         encoded: &'buffer mut [u8],
-        decoded: &'buffer mut [u8],
         decoded_samples: &'buffer mut [i16],
         i2s_samples: &'buffer mut [i32],
     ) -> Result<Self, PlaybackError> {
         for (buffer, empty) in [
             ("encoded", encoded.is_empty()),
-            ("decoded", decoded.is_empty()),
-            ("decoded sample", decoded_samples.is_empty()),
+            ("decoded PCM", decoded_samples.is_empty()),
             ("I2S sample", i2s_samples.is_empty()),
         ] {
             if empty {
@@ -270,7 +267,6 @@ impl<'buffer> PlaybackWorkspace<'buffer> {
 
         Ok(Self {
             encoded,
-            decoded,
             decoded_samples,
             i2s_samples,
         })
@@ -297,7 +293,6 @@ pub(super) fn play_reader(
         let bytes_read = read_source(reader, workspace.encoded, cancelled)?;
         if bytes_read == 0 {
             let mut output = DecodeOutput {
-                pcm_bytes: workspace.decoded,
                 pcm_samples: workspace.decoded_samples,
                 i2s_samples: workspace.i2s_samples,
                 transmit,
@@ -311,7 +306,6 @@ pub(super) fn play_reader(
         }
 
         let mut output = DecodeOutput {
-            pcm_bytes: workspace.decoded,
             pcm_samples: workspace.decoded_samples,
             i2s_samples: workspace.i2s_samples,
             transmit,
@@ -392,7 +386,6 @@ fn play_ogg_reader(
             transform.set_final_granule(packet.absgp_page())?;
         }
         let mut output = DecodeOutput {
-            pcm_bytes: workspace.decoded,
             pcm_samples: workspace.decoded_samples,
             i2s_samples: workspace.i2s_samples,
             transmit,
@@ -407,7 +400,6 @@ fn play_ogg_reader(
     }
 
     let mut output = DecodeOutput {
-        pcm_bytes: workspace.decoded,
         pcm_samples: workspace.decoded_samples,
         i2s_samples: workspace.i2s_samples,
         transmit,
@@ -608,7 +600,6 @@ fn read_exact_source(
 }
 
 struct DecodeOutput<'buffer, 'state, 'cancelled> {
-    pcm_bytes: &'buffer mut [u8],
     pcm_samples: &'buffer mut [i16],
     i2s_samples: &'buffer mut [i32],
     transmit: &'state mut TransmitChannel,
@@ -628,12 +619,14 @@ fn decode_chunk(
 
     loop {
         ensure_not_cancelled(output.cancelled)?;
-        let progress = codec.process(&mut input[consumed..], end_of_stream, output.pcm_bytes)?;
+        let pcm_bytes = pcm::i16_slice_as_bytes_mut(output.pcm_samples);
+        let available = pcm_bytes.len();
+        let progress = codec.process(&mut input[consumed..], end_of_stream, pcm_bytes)?;
         ensure_not_cancelled(output.cancelled)?;
         if let Some(required) = progress.required_capacity {
             return Err(PlaybackError::DecoderOutputTooSmall {
                 required,
-                available: output.pcm_bytes.len(),
+                available,
             });
         }
         consumed += progress.consumed;
@@ -694,23 +687,16 @@ fn convert_and_write(
         }),
     };
 
-    let pcm_bytes = &output.pcm_bytes[..produced];
-    if pcm_bytes.len() % size_of_i16() != 0 {
-        return Err(PlaybackError::MisalignedDecodedPcm {
-            bytes: pcm_bytes.len(),
-        });
+    if produced % size_of_i16() != 0 {
+        return Err(PlaybackError::MisalignedDecodedPcm { bytes: produced });
     }
-    let samples = pcm_bytes.len() / size_of_i16();
+    let samples = produced / size_of_i16();
     if samples > output.pcm_samples.len() {
         return Err(PlaybackError::DecodedSampleBufferTooSmall {
             required: samples,
             available: output.pcm_samples.len(),
         });
     }
-    for (sample, bytes) in output.pcm_samples.iter_mut().zip(pcm_bytes.chunks_exact(2)) {
-        *sample = i16::from_le_bytes([bytes[0], bytes[1]]);
-    }
-
     let channels = usize::from(information.channels);
     let frames = samples / channels;
     let retained_frames = output.transform.retain_decoded_frames(frames);

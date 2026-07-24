@@ -613,7 +613,6 @@ impl PlaybackSourceError {
 
 struct WorkspaceBuffers {
     encoded: Vec<u8>,
-    decoded: Vec<u8>,
     decoded_samples: Vec<i16>,
     i2s_samples: Vec<i32>,
 }
@@ -622,8 +621,7 @@ impl WorkspaceBuffers {
     fn new() -> Result<Self, WorkerStartError> {
         Ok(Self {
             encoded: allocate_zeroed("encoded input", ENCODED_BYTES, 0_u8)?,
-            decoded: allocate_zeroed("decoded PCM", DECODED_BYTES, 0_u8)?,
-            decoded_samples: allocate_zeroed("decoded samples", DECODED_SAMPLES, 0_i16)?,
+            decoded_samples: allocate_zeroed("decoded PCM", DECODED_SAMPLES, 0_i16)?,
             i2s_samples: allocate_zeroed("I2S samples", I2S_SAMPLES, 0_i32)?,
         })
     }
@@ -631,7 +629,6 @@ impl WorkspaceBuffers {
     fn workspace(&mut self) -> Result<PlaybackWorkspace<'_>, PlaybackError> {
         PlaybackWorkspace::new(
             &mut self.encoded,
-            &mut self.decoded,
             &mut self.decoded_samples,
             &mut self.i2s_samples,
         )
