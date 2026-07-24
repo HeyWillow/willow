@@ -1,10 +1,5 @@
 //! Allocation-free PCM channel conversion, resampling, and I2S packing.
 
-#![allow(
-    dead_code,
-    reason = "the PCM converter remains inactive until the Rust player is connected"
-)]
-
 use core::fmt;
 
 const MAXIMUM_SAMPLE_RATE_HZ: u32 = 192_000;
@@ -114,6 +109,11 @@ impl PcmConverter {
     }
 
     /// Clears interpolation history before beginning a different PCM stream.
+    #[cfg(test)]
+    #[allow(
+        dead_code,
+        reason = "the firmware binary disables Cargo's test harness"
+    )]
     pub(crate) fn reset(&mut self) {
         self.previous = None;
         self.current = None;
@@ -252,6 +252,10 @@ fn write_i2s_frame(output: &mut [i32], frame: usize, samples: StereoFrame) {
 }
 
 #[cfg(test)]
+#[allow(
+    dead_code,
+    reason = "the firmware binary disables Cargo's test harness"
+)]
 mod tests {
     #[test]
     fn rejects_invalid_layouts() {

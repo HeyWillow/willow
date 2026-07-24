@@ -1,10 +1,5 @@
 //! Allocation-free HTTP/1.1 chunked transfer framing.
 
-#![allow(
-    dead_code,
-    reason = "WIS streaming remains inactive until Rust owns runtime audio"
-)]
-
 use core::mem::size_of;
 use std::io::{self, Write};
 
@@ -84,6 +79,10 @@ fn chunk_header(length: usize, buffer: &mut [u8]) -> &[u8] {
 }
 
 #[cfg(test)]
+#[allow(
+    dead_code,
+    reason = "the firmware binary disables Cargo's test harness"
+)]
 mod tests {
     #[test]
     fn writes_lowercase_hex_chunks_and_terminal_marker() {

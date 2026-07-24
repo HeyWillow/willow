@@ -1,10 +1,5 @@
 //! Audio hardware descriptors for every supported ESP32-S3-BOX board.
 
-#![allow(
-    dead_code,
-    reason = "the descriptors remain inactive until Rust takes ownership of I2S0"
-)]
-
 use esp_idf_sys::{
     gpio_num_t_GPIO_NUM_1, gpio_num_t_GPIO_NUM_2, gpio_num_t_GPIO_NUM_15, gpio_num_t_GPIO_NUM_16,
     gpio_num_t_GPIO_NUM_17, gpio_num_t_GPIO_NUM_45, gpio_num_t_GPIO_NUM_46, gpio_num_t_GPIO_NUM_47,

@@ -1,10 +1,5 @@
 //! SPIFFS audio URI validation and streaming playback.
 
-#![allow(
-    dead_code,
-    reason = "SPIFFS playback remains inactive until Rust owns runtime audio"
-)]
-
 use core::fmt;
 use std::{fs::File, io, path::PathBuf};
 

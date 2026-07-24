@@ -6,7 +6,7 @@
 //! into an RGB565 frame in PSRAM, and flushes them through a small internal DMA
 //! buffer. Bounded oversized lines are cached in PSRAM and only their viewport
 //! is flushed while scrolling. Touch polling is also Rust-owned and sends
-//! nonblocking cancel events to the existing Rust-owned recorder queue.
+//! nonblocking cancellation through the Rust audio APIs.
 
 use core::{convert::Infallible, ffi::c_char, mem::size_of, ptr, slice};
 use std::{
@@ -32,14 +32,12 @@ use embedded_graphics::{
 use esp_idf_svc::hal::delay::FreeRtos;
 use esp_idf_sys::{
     ESP_ERR_INVALID_STATE, ESP_ERR_NO_MEM, ESP_FAIL, ESP_OK, EspError, MALLOC_CAP_8BIT,
-    MALLOC_CAP_DMA, MALLOC_CAP_INTERNAL, MALLOC_CAP_SPIRAM,
-    audio_termination_type_t_TERMINATION_TYPE_NOW, esp_audio_handle_t, esp_audio_stop, esp_err_t,
-    esp_lcd_new_panel_io_i2c_v2, esp_lcd_panel_draw_bitmap, esp_lcd_panel_io_del,
-    esp_lcd_panel_io_handle_t, esp_lcd_panel_io_i2c_config_t, esp_lcd_panel_io_tx_param,
-    esp_lcd_touch_config_t, esp_lcd_touch_del, esp_lcd_touch_get_coordinates,
-    esp_lcd_touch_handle_t, esp_lcd_touch_new_i2c_gt911, esp_lcd_touch_new_i2c_tt21100,
-    esp_lcd_touch_read_data, gpio_num_t_GPIO_NUM_3, gpio_num_t_GPIO_NUM_NC, heap_caps_free,
-    heap_caps_malloc,
+    MALLOC_CAP_DMA, MALLOC_CAP_INTERNAL, MALLOC_CAP_SPIRAM, esp_err_t, esp_lcd_new_panel_io_i2c_v2,
+    esp_lcd_panel_draw_bitmap, esp_lcd_panel_io_del, esp_lcd_panel_io_handle_t,
+    esp_lcd_panel_io_i2c_config_t, esp_lcd_panel_io_tx_param, esp_lcd_touch_config_t,
+    esp_lcd_touch_del, esp_lcd_touch_get_coordinates, esp_lcd_touch_handle_t,
+    esp_lcd_touch_new_i2c_gt911, esp_lcd_touch_new_i2c_tt21100, esp_lcd_touch_read_data,
+    gpio_num_t_GPIO_NUM_3, gpio_num_t_GPIO_NUM_NC, heap_caps_free, heap_caps_malloc,
 };
 use log::{debug, error, info};
 use rusttype::{Font, Scale, point};
@@ -124,7 +122,6 @@ struct UiState {
     cancel_action: CancelAction,
     lines: [Line; 5],
     notification_cancelled: bool,
-    notification_player: usize,
 }
 
 impl UiState {
@@ -133,7 +130,6 @@ impl UiState {
             cancel_action: CancelAction::None,
             lines: std::array::from_fn(|_| Line::default()),
             notification_cancelled: false,
-            notification_player: 0,
         };
 
         state.set_line(
@@ -888,16 +884,16 @@ fn point_in_cancel(point: Point) -> bool {
 }
 
 fn cancel(state: &Arc<Mutex<UiState>>) {
-    let (action, player) = {
-        let state = state.lock().unwrap_or_else(PoisonError::into_inner);
-        (state.cancel_action, state.notification_player)
-    };
+    let action = state
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner)
+        .cancel_action;
 
     match action {
         CancelAction::None => {}
         CancelAction::Recording => {
-            if let Err(error) = crate::audio::send_stop_event() {
-                error!(target: LOG_TARGET, "failed to send recorder stop event: {error}");
+            if let Err(error) = crate::audio::stop_recording() {
+                error!(target: LOG_TARGET, "failed to stop recording: {error:#?}");
             }
         }
         CancelAction::Notification => {
@@ -905,16 +901,8 @@ fn cancel(state: &Arc<Mutex<UiState>>) {
                 .lock()
                 .unwrap_or_else(PoisonError::into_inner)
                 .notification_cancelled = true;
-            if player != 0 {
-                let result = unsafe {
-                    esp_audio_stop(
-                        player as esp_audio_handle_t,
-                        audio_termination_type_t_TERMINATION_TYPE_NOW,
-                    )
-                };
-                if result != ESP_OK {
-                    error!(target: LOG_TARGET, "failed to stop notification audio: {result}");
-                }
+            if let Err(error) = crate::audio::cancel_playback() {
+                error!(target: LOG_TARGET, "failed to stop notification audio: {error:#?}");
             }
         }
     }
@@ -1107,13 +1095,12 @@ pub(crate) fn show_ready(message: &str) {
     });
 }
 
-pub(crate) fn show_notification(message: Option<&str>, player: esp_audio_handle_t) {
+pub(crate) fn show_notification(message: Option<&str>) {
     let message = message.unwrap_or("Notification Active");
     update(|state| {
         state.hide(&[0, 1, 3, 4]);
         state.cancel_action = CancelAction::Notification;
         state.notification_cancelled = false;
-        state.notification_player = player as usize;
         state.set_scrolling_line(2, message, LineAlignment::Center, Rgb565::WHITE);
     });
 }
@@ -1130,7 +1117,6 @@ pub(crate) fn notification_cancelled() -> bool {
 pub(crate) fn notification_end() {
     update(|state| {
         state.cancel_action = CancelAction::None;
-        state.notification_player = 0;
     });
 }
 
@@ -1203,12 +1189,9 @@ pub unsafe extern "C" fn rust_ui_show_ready(message: *const c_char) {
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ui_show_notification(
-    message: *const c_char,
-    player: esp_audio_handle_t,
-) {
+pub unsafe extern "C" fn rust_ui_show_notification(message: *const c_char) {
     let message = unsafe { text(message) };
-    show_notification(message.as_deref(), player);
+    show_notification(message.as_deref());
 }
 
 #[unsafe(no_mangle)]

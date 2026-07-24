@@ -4,7 +4,6 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#include "audio.h"
 #include "rust.h"
 
 static const char *TAG = "WILLOW/OTA";
@@ -28,7 +27,7 @@ void ota_start(char *url)
     rust_ui_show_center_message("Starting Upgrade");
     rust_backlight_set(true, false);
 
-    deinit_audio();
+    rust_audio_deinit();
     rust_was_deinit();
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);

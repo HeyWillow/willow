@@ -1,10 +1,5 @@
 //! Pure recorder-session transitions and side-effect decisions.
 
-#![allow(
-    dead_code,
-    reason = "the state machine remains inactive until Rust owns runtime audio"
-)]
-
 /// Recorder behavior fixed from the active startup configuration.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct RecorderPolicy {
@@ -160,6 +155,11 @@ impl RecorderMachine {
         }
     }
 
+    #[cfg(test)]
+    #[allow(
+        dead_code,
+        reason = "the firmware binary disables Cargo's test harness"
+    )]
     pub(super) const fn state(&self) -> RecorderState {
         self.state
     }
@@ -477,6 +477,10 @@ const fn settle(finishing: FinishingState) -> RecorderState {
 }
 
 #[cfg(test)]
+#[allow(
+    dead_code,
+    reason = "the firmware binary disables Cargo's test harness"
+)]
 mod tests {
     const CONFIRMING_POLICY: super::RecorderPolicy = super::RecorderPolicy {
         multiwake_enabled: false,

@@ -1,10 +1,5 @@
 //! Proven ES7210 microphone ADC initialization and verification.
 
-#![allow(
-    dead_code,
-    reason = "the codec remains inactive until Rust takes ownership of I2S0"
-)]
-
 use core::fmt;
 
 use esp_idf_sys::EspError;

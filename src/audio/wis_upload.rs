@@ -1,10 +1,5 @@
 //! Bounded chunked HTTP upload for WIS audio sessions.
 
-#![allow(
-    dead_code,
-    reason = "WIS streaming remains inactive until Rust owns runtime audio"
-)]
-
 use core::{fmt, time::Duration};
 use std::{collections::TryReserveError, io};
 
@@ -152,10 +147,6 @@ pub(super) struct WisUploadResponse {
 }
 
 impl WisUploadResponse {
-    pub(super) fn body(&self) -> &[u8] {
-        &self.body
-    }
-
     pub(super) fn into_body(self) -> Vec<u8> {
         self.body
     }

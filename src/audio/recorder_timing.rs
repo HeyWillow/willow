@@ -1,10 +1,5 @@
 //! Pure timing state for the legacy ADF recorder lifecycle.
 
-#![allow(
-    dead_code,
-    reason = "the timing state remains inactive until Rust owns runtime audio"
-)]
-
 use core::time::Duration;
 
 const NO_SPEECH_TIMEOUT: Duration = Duration::from_secs(10);
@@ -144,6 +139,10 @@ impl RecorderTiming {
 }
 
 #[cfg(test)]
+#[allow(
+    dead_code,
+    reason = "the firmware binary disables Cargo's test harness"
+)]
 mod tests {
     use core::time::Duration;
 

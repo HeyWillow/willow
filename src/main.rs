@@ -63,13 +63,6 @@ fn main() {
         unsafe { esp_idf_sys::vTaskDelay(u32::MAX) }
     }
 
-    if let Err(error) = audio::initialize_recorder_queue() {
-        log::error!(target: "WILLOW/MAIN", "failed to initialize recorder queue: {error}");
-        unsafe { esp_idf_sys::esp_system_abort(c"recorder queue initialization failed".as_ptr()) }
-    }
-    if let Err(error) = audio::initialize_session_timer() {
-        log::error!(target: "WILLOW/MAIN", "failed to initialize session timer: {error}");
-    }
     if let Err(error) = i2c::init() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize I2C0 master bus: {error}");
         unsafe { esp_idf_sys::esp_system_abort(c"I2C0 initialization failed".as_ptr()) }
@@ -78,6 +71,10 @@ fn main() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
     ffi::init();
+    if let Err(error) = audio::initialize() {
+        log::error!(target: "WILLOW/MAIN", "failed to initialize audio: {error:#?}");
+        ui::show_error("Recorder init failed", Some("Check logs"));
+    }
     if let Err(error) = backlight::initialize_display_timer() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize display timer: {error}");
     }

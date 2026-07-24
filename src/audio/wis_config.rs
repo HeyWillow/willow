@@ -1,10 +1,5 @@
 //! Active configuration adapter for WIS audio encoding.
 
-#![allow(
-    dead_code,
-    reason = "WIS streaming remains inactive until Rust owns runtime audio"
-)]
-
 use willow_schema::config::v1::AudioCodec;
 
 use super::wis_framing::WisFormat;

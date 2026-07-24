@@ -1,10 +1,5 @@
 //! Bounded per-session WIS audio encoder.
 
-#![allow(
-    dead_code,
-    reason = "WIS streaming remains inactive until Rust owns runtime audio"
-)]
-
 use core::fmt;
 use std::{collections::TryReserveError, io};
 
@@ -107,10 +102,6 @@ impl WisEncoder {
             WisFormat::Pcm | WisFormat::Wav => EncoderInner::Uncompressed,
         };
         Ok(Self { format, inner })
-    }
-
-    pub(super) const fn format(&self) -> WisFormat {
-        self.format
     }
 
     pub(super) fn write_samples(

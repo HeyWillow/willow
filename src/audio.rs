@@ -1,7 +1,4 @@
-//! Rust audio ownership and migration support.
-//!
-//! Coordination resources serve the retained C engine while the inactive
-//! capture modules prepare the atomic Rust audio cut-over.
+//! Rust-owned capture, speech recognition, recording, upload, and playback.
 
 mod board;
 mod capture;
@@ -33,156 +30,269 @@ mod wis_encoder;
 mod wis_framing;
 mod wis_upload;
 
-use core::{ffi::c_void, ptr::NonNull};
+use core::{ffi::c_char, fmt};
 use std::{
-    sync::{
-        Arc, Mutex, MutexGuard, OnceLock, PoisonError,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-    },
-    time::Duration,
+    ffi::CStr,
+    sync::{Arc, Mutex, MutexGuard},
 };
 
-use esp_idf_svc::hal::task::queue::Queue;
-use esp_idf_svc::timer::{EspTaskTimerService, EspTimer};
-use esp_idf_sys::{
-    ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_ERR_NO_MEM, ESP_OK, EspError, QueueHandle_t,
-    audio_rec_handle_t, audio_recorder_trigger_stop, esp_err_t, q_msg_MSG_STOP as MSG_STOP,
-};
+use esp_idf_sys::{ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_FAIL, ESP_OK, esp_err_t};
 use log::{error, info};
 
-const RECORDER_QUEUE_CAPACITY: usize = 3;
-const SESSION_TIMER_LOG_TARGET: &str = "WILLOW/TIMER";
+use self::{
+    codecs::{BoardCodecDevices, MicrophoneDevice},
+    i2s::DuplexChannels,
+    player::Player,
+    record_buffer::RecordBuffer,
+    record_upload::UploadWorker,
+    recorder::CaptureWorker,
+    recorder_coordinator::RecorderCoordinator,
+    response::{CommandOutcome, ResponseAudio},
+};
 
-struct SessionTimer {
-    armed: Arc<AtomicBool>,
-    recorder: Arc<AtomicUsize>,
-    timer: Mutex<EspTimer<'static>>,
+const DEFAULT_MIC_GAIN: u8 = 14;
+const DEFAULT_RECORD_BUFFER_KIB: usize = 12;
+const DEFAULT_SPEAKER_VOLUME: u8 = 60;
+const LOG_TARGET: &str = "WILLOW/AUDIO";
+/// Live PCM headroom formerly supplied by the ADF raw-stream writer.
+const WIS_SESSION_BACKLOG_BYTES: usize = 64 * 1024;
+
+static RUNTIME: Mutex<Option<AudioRuntime>> = Mutex::new(None);
+
+struct AudioRuntime {
+    // Drop the coordinator before the player and microphone. The coordinator
+    // joins capture and upload and releases its player clone before the final
+    // player owner stops TX and releases the playback codec.
+    coordinator: RecorderCoordinator,
+    player: Arc<Player>,
+    microphone: Arc<Mutex<MicrophoneDevice>>,
 }
 
-static RECORDER_QUEUE: OnceLock<Queue<i32>> = OnceLock::new();
-static RECORDING: AtomicBool = AtomicBool::new(false);
-static SESSION_TIMER: OnceLock<SessionTimer> = OnceLock::new();
-
-/// Creates and retains the recorder event queue for the firmware lifetime.
-pub(crate) fn initialize_recorder_queue() -> Result<(), EspError> {
-    if RECORDER_QUEUE.get().is_some() {
-        return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
+impl AudioRuntime {
+    fn shutdown(self) {
+        let Self {
+            coordinator,
+            player,
+            microphone,
+        } = self;
+        drop(coordinator);
+        player.shutdown();
+        drop(player);
+        drop(microphone);
     }
-
-    let recorder_queue = Queue::new(RECORDER_QUEUE_CAPACITY);
-    if recorder_queue.as_raw().is_null() {
-        return Err(EspError::from_infallible::<ESP_ERR_NO_MEM>());
-    }
-
-    RECORDER_QUEUE
-        .set(recorder_queue)
-        .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_STATE>())
 }
 
-/// Creates and retains the audio session timeout for the firmware lifetime.
-pub(crate) fn initialize_session_timer() -> Result<(), EspError> {
-    if SESSION_TIMER.get().is_some() {
-        return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
-    }
-
-    let armed = Arc::new(AtomicBool::new(false));
-    let recorder = Arc::new(AtomicUsize::new(0));
-    let timer = {
-        let armed = Arc::clone(&armed);
-        let recorder = Arc::clone(&recorder);
-        EspTaskTimerService::new()?.timer(move || {
-            if !armed.swap(false, Ordering::AcqRel) {
-                return;
-            }
-
-            let recorder = recorder.swap(0, Ordering::AcqRel);
-            if recorder == 0 || !is_recording() {
-                return;
-            }
-
-            info!(target: SESSION_TIMER_LOG_TARGET, "session timer expired - forcing end stream");
-            let _ = unsafe { audio_recorder_trigger_stop(recorder as audio_rec_handle_t) };
-            if let Err(error) = send_stop_event() {
-                error!(target: SESSION_TIMER_LOG_TARGET, "failed to send recorder stop event: {error}");
-            }
-        })?
-    };
-
-    SESSION_TIMER
-        .set(SessionTimer {
-            armed,
-            recorder,
-            timer: Mutex::new(timer),
-        })
-        .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_STATE>())
+#[derive(Debug)]
+pub(crate) struct AudioStartError {
+    detail: String,
 }
 
-pub(crate) fn cancel_session_timeout() -> Result<(), EspError> {
-    let session_timer = SESSION_TIMER
-        .get()
-        .ok_or_else(EspError::from_infallible::<ESP_ERR_INVALID_STATE>)?;
-    session_timer.armed.store(false, Ordering::Release);
-    session_timer.recorder.store(0, Ordering::Release);
-    session_timer
-        .timer
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner)
-        .cancel()
-        .map(|_| ())
-}
-
-/// Arms the session timeout with a borrowed recorder handle.
-///
-/// # Safety
-///
-/// `recorder` must remain valid until the timeout fires or is canceled.
-pub(crate) unsafe fn schedule_session_timeout(
-    recorder: NonNull<c_void>,
-    timeout: Duration,
-) -> Result<(), EspError> {
-    let session_timer = SESSION_TIMER
-        .get()
-        .ok_or_else(EspError::from_infallible::<ESP_ERR_INVALID_STATE>)?;
-    let timer = session_timer
-        .timer
-        .lock()
-        .unwrap_or_else(PoisonError::into_inner);
-
-    session_timer.armed.store(false, Ordering::Release);
-    session_timer.recorder.store(0, Ordering::Release);
-    let _ = timer.cancel()?;
-
-    session_timer
-        .recorder
-        .store(recorder.as_ptr() as usize, Ordering::Release);
-    session_timer.armed.store(true, Ordering::Release);
-    if let Err(error) = timer.after(timeout) {
-        session_timer.armed.store(false, Ordering::Release);
-        session_timer.recorder.store(0, Ordering::Release);
-        return Err(error);
+impl AudioStartError {
+    fn message(detail: impl Into<String>) -> Self {
+        Self {
+            detail: detail.into(),
+        }
     }
 
+    fn stage(stage: &str, source: &impl fmt::Debug) -> Self {
+        Self::message(format!("{stage}: {source:#?}"))
+    }
+}
+
+impl fmt::Display for AudioStartError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(&self.detail)
+    }
+}
+
+impl std::error::Error for AudioStartError {}
+
+#[derive(Debug)]
+pub(crate) enum AudioError {
+    Command { detail: String },
+    NotInitialized,
+}
+
+impl AudioError {
+    fn command(operation: &str, source: &impl fmt::Debug) -> Self {
+        Self::Command {
+            detail: format!("{operation}: {source:#?}"),
+        }
+    }
+}
+
+impl fmt::Display for AudioError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Command { detail } => formatter.write_str(detail),
+            Self::NotInitialized => formatter.write_str("audio is not initialized"),
+        }
+    }
+}
+
+impl std::error::Error for AudioError {}
+
+/// Starts all audio hardware and workers under one Rust owner.
+pub(crate) fn initialize() -> Result<(), AudioStartError> {
+    if lock_runtime().is_some() {
+        return Err(AudioStartError::message("audio is already initialized"));
+    }
+    recorder_coordinator::wait_for_initial_unmute();
+
+    let configuration = crate::config::config();
+    let mic_gain = configuration
+        .and_then(|config| config.mic_gain)
+        .unwrap_or(DEFAULT_MIC_GAIN);
+    let speaker_volume = configuration
+        .and_then(|config| config.speaker_volume)
+        .unwrap_or(DEFAULT_SPEAKER_VOLUME)
+        .min(100);
+    let record_buffer_kib = configuration
+        .and_then(|config| config.record_buffer)
+        .map_or(DEFAULT_RECORD_BUFFER_KIB, usize::from);
+    let record_buffer_bytes = record_buffer_kib.checked_mul(1024).ok_or_else(|| {
+        AudioStartError::message(format!(
+            "configured {record_buffer_kib} KiB recorder buffer capacity overflows"
+        ))
+    })?;
+
+    let BoardCodecDevices {
+        mut microphone,
+        playback,
+    } = BoardCodecDevices::new()
+        .map_err(|source| AudioStartError::stage("codec startup failed", &source))?;
+    microphone
+        .apply_gain(mic_gain)
+        .map_err(|source| AudioStartError::stage("microphone gain setup failed", &source))?;
+    let microphone = Arc::new(Mutex::new(microphone));
+    let DuplexChannels { receive, transmit } = DuplexChannels::new()
+        .map_err(|source| AudioStartError::stage("I2S0 startup failed", &source))?;
+    let record_buffer = RecordBuffer::new(record_buffer_bytes, WIS_SESSION_BACKLOG_BYTES)
+        .map_err(|source| AudioStartError::stage("recorder buffer startup failed", &source))?;
+    let upload = UploadWorker::start(record_buffer.clone())
+        .map_err(|source| AudioStartError::stage("WIS upload startup failed", &source))?;
+    let capture = CaptureWorker::start(receive, record_buffer)
+        .map_err(|source| AudioStartError::stage("capture startup failed", &source))?;
+    let player = Arc::new(
+        Player::start(transmit, playback, speaker_volume)
+            .map_err(|source| AudioStartError::stage("player startup failed", &source))?,
+    );
+
+    let reset_microphone = Arc::clone(&microphone);
+    let coordinator = RecorderCoordinator::start(capture, upload, Arc::clone(&player), move || {
+        let result = lock(&reset_microphone).reinitialize(mic_gain);
+        if let Err(source) = result {
+            error!(target: LOG_TARGET, "failed to reinitialize microphone after unmute: {source:#?}");
+        } else {
+            info!(target: LOG_TARGET, "reinitialized microphone after unmute");
+        }
+    })
+    .map_err(|source| AudioStartError::stage("coordinator startup failed", &source))?;
+
+    let mut runtime = lock_runtime();
+    if runtime.is_some() {
+        return Err(AudioStartError::message("audio is already initialized"));
+    }
+    *runtime = Some(AudioRuntime {
+        coordinator,
+        player,
+        microphone,
+    });
+    drop(runtime);
+
+    crate::ui::show_ready(wake_help());
+    info!(target: LOG_TARGET, "Rust audio runtime started");
     Ok(())
 }
 
-pub(crate) fn send_recorder_event(event: i32, timeout: u32) -> Result<(), EspError> {
-    let recorder_queue = RECORDER_QUEUE
-        .get()
-        .ok_or_else(EspError::from_infallible::<ESP_ERR_INVALID_STATE>)?;
-    recorder_queue.send_back(event, timeout).map(|_| ())
+/// Stops and joins every audio worker before releasing the hardware.
+pub(crate) fn deinitialize() {
+    let runtime = lock_runtime().take();
+    if let Some(runtime) = runtime {
+        runtime.shutdown();
+    }
 }
 
-/// Queues a recorder stop without blocking when the queue is full.
-pub(crate) fn send_stop_event() -> Result<(), EspError> {
-    send_recorder_event(MSG_STOP as i32, 0)
+/// Requests recorder cancellation without blocking the caller.
+pub(crate) fn stop_recording() -> Result<(), AudioError> {
+    lock_runtime()
+        .as_ref()
+        .ok_or(AudioError::NotInitialized)?
+        .coordinator
+        .stop()
+        .map_err(|source| AudioError::command("failed to stop recorder", &source))
 }
 
-pub(crate) fn is_recording() -> bool {
-    RECORDING.load(Ordering::Acquire)
+/// Applies the Willow One Wake arbitration result.
+pub(crate) fn multiwake_result(won: bool) -> Result<(), AudioError> {
+    lock_runtime()
+        .as_ref()
+        .ok_or(AudioError::NotInitialized)?
+        .coordinator
+        .multiwake_result(won)
+        .map_err(|source| AudioError::command("failed to apply multiwake result", &source))
 }
 
-pub(crate) fn set_recording(recording: bool) {
-    RECORDING.store(recording, Ordering::Release);
+/// Queues configured command-result audio.
+pub(crate) fn play_response(ok: bool, text: Option<&str>) -> Result<(), AudioError> {
+    let outcome = if ok {
+        CommandOutcome::Success
+    } else {
+        CommandOutcome::Error
+    };
+    match response_config::active_policy().select(outcome, text) {
+        Ok(ResponseAudio::None) => Ok(()),
+        Ok(ResponseAudio::Play(uri)) => {
+            response_config::prepare_playback();
+            player()?
+                .play(&uri)
+                .map_err(|source| AudioError::command("failed to queue response audio", &source))
+        }
+        Err(source) => {
+            error!(target: LOG_TARGET, "failed to select command response audio: {source:#?}");
+            Ok(())
+        }
+    }
+}
+
+/// Cooperatively cancels active playback.
+pub(crate) fn cancel_playback() -> Result<(), AudioError> {
+    player()?.cancel();
+    Ok(())
+}
+
+/// Plays one URI synchronously on the player worker.
+pub(crate) fn play_sync(uri: &str) -> Result<(), AudioError> {
+    player()?
+        .play_sync(uri)
+        .map_err(|source| AudioError::command("synchronous playback failed", &source))
+}
+
+/// Applies a temporary or configured-default playback volume.
+pub(crate) fn set_volume(volume: Option<i32>) -> Result<(), AudioError> {
+    let volume = volume.unwrap_or_else(|| {
+        crate::config::config()
+            .and_then(|config| config.speaker_volume)
+            .map_or(i32::from(DEFAULT_SPEAKER_VOLUME), i32::from)
+    });
+    let volume = u8::try_from(volume.clamp(0, 100)).unwrap_or(100);
+    player()?
+        .set_volume(volume)
+        .map_err(|source| AudioError::command("volume update failed", &source))
+}
+
+fn player() -> Result<Arc<Player>, AudioError> {
+    lock_runtime()
+        .as_ref()
+        .map(|runtime| Arc::clone(&runtime.player))
+        .ok_or(AudioError::NotInitialized)
+}
+
+fn lock_runtime() -> MutexGuard<'static, Option<AudioRuntime>> {
+    match RUNTIME.lock() {
+        Ok(runtime) => runtime,
+        Err(poisoned) => poisoned.into_inner(),
+    }
 }
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -192,45 +302,73 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     }
 }
 
-/// Returns the Rust-owned recorder queue as a borrowed FreeRTOS handle.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_audio_recorder_queue_handle() -> QueueHandle_t {
-    RECORDER_QUEUE.get().map(Queue::as_raw).unwrap_or_default()
-}
-
-/// Returns the Rust-owned recorder state for retained C callers.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_audio_is_recording() -> bool {
-    is_recording()
-}
-
-/// Cancels the Rust-owned audio session timeout for retained C callers.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_audio_session_timer_cancel() -> esp_err_t {
-    match cancel_session_timeout() {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
+fn wake_help() -> &'static str {
+    match crate::config::config().and_then(|config| config.wake_word.as_deref()) {
+        Some("alexa") => "Say 'Alexa' to start!",
+        Some("hilexin") => "Say 'Hi Lexin' to start!",
+        Some("hiesp") | None => "Say 'Hi ESP' to start!",
+        Some(wake_word) => {
+            error!(target: LOG_TARGET, "selected wake word {wake_word:?} is not supported");
+            "Ready!"
+        }
     }
 }
 
-/// Converts the borrowed C recorder handle for the Rust session timer.
+unsafe fn text(pointer: *const c_char) -> Option<String> {
+    (!pointer.is_null()).then(|| {
+        unsafe { CStr::from_ptr(pointer) }
+            .to_string_lossy()
+            .into_owned()
+    })
+}
+
+fn ffi_result(result: Result<(), AudioError>) -> esp_err_t {
+    match result {
+        Ok(()) => ESP_OK,
+        Err(AudioError::NotInitialized) => ESP_ERR_INVALID_STATE,
+        Err(source) => {
+            error!(target: LOG_TARGET, "audio command from C failed: {source:#?}");
+            ESP_FAIL
+        }
+    }
+}
+
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_audio_session_timer_reset(
-    recorder: *mut c_void,
-    timeout_secs: u32,
-) -> esp_err_t {
-    let Some(recorder) = NonNull::new(recorder) else {
+pub extern "C" fn rust_audio_deinit() {
+    deinitialize();
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_audio_multiwake_result(won: bool) {
+    if let Err(source) = multiwake_result(won) {
+        error!(target: LOG_TARGET, "failed to apply multiwake result: {source:#?}");
+    }
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_audio_play_response(ok: bool, text_pointer: *const c_char) {
+    let text = unsafe { text(text_pointer) };
+    if let Err(source) = play_response(ok, text.as_deref()) {
+        error!(target: LOG_TARGET, "failed to play command response: {source:#?}");
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_audio_cancel_playback() {
+    if let Err(source) = cancel_playback() {
+        error!(target: LOG_TARGET, "failed to cancel playback: {source:#?}");
+    }
+}
+
+#[unsafe(no_mangle)]
+pub extern "C" fn rust_audio_set_volume(volume: i32) -> esp_err_t {
+    ffi_result(set_volume((volume >= 0).then_some(volume)))
+}
+
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_audio_play_sync(uri: *const c_char) -> esp_err_t {
+    let Some(uri) = (unsafe { text(uri) }) else {
         return ESP_ERR_INVALID_ARG;
     };
-
-    match unsafe { schedule_session_timeout(recorder, Duration::from_secs(timeout_secs.into())) } {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
-    }
-}
-
-/// Updates the Rust-owned recorder state for retained C callers.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_audio_set_recording(recording: bool) {
-    set_recording(recording);
+    ffi_result(play_sync(&uri))
 }

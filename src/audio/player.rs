@@ -1,10 +1,5 @@
 //! Bounded audio playback worker and cooperative cancellation.
 
-#![allow(
-    dead_code,
-    reason = "the player remains inactive until the atomic Rust audio cut-over"
-)]
-
 use core::{fmt, mem::size_of};
 use std::{
     collections::TryReserveError,

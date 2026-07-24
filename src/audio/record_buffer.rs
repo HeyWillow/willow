@@ -1,10 +1,5 @@
 //! Fixed-capacity PCM history and session handoff for recording.
 
-#![allow(
-    dead_code,
-    reason = "the record buffer remains inactive until Rust owns runtime audio"
-)]
-
 use core::{fmt, mem};
 use std::{
     collections::TryReserveError,
@@ -488,6 +483,10 @@ fn u64_to_usize(value: u64, reason: &'static str) -> Result<usize, RecordBufferE
 }
 
 #[cfg(test)]
+#[allow(
+    dead_code,
+    reason = "the firmware binary disables Cargo's test harness"
+)]
 mod tests {
     fn buffer(samples: usize) -> super::RecordBuffer {
         buffer_with_backlog(samples, 0)

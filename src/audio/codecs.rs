@@ -1,10 +1,5 @@
 //! Owned codec interfaces for every supported Willow audio board.
 
-#![allow(
-    dead_code,
-    reason = "the codec owners remain inactive until Rust takes ownership of I2S0"
-)]
-
 use core::{
     ffi::c_void,
     fmt,

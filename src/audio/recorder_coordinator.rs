@@ -1,9 +1,4 @@
-//! Inactive recorder behavior coordinator for the atomic audio cut-over.
-
-#![allow(
-    dead_code,
-    reason = "the coordinator remains inactive until Rust owns runtime audio"
-)]
+//! Recorder behavior coordinator for the Rust-owned audio runtime.
 
 use core::{fmt, str, time::Duration};
 use std::{

@@ -1,10 +1,5 @@
 //! Bounded synchronous playback from encoded readers to I2S0.
 
-#![allow(
-    dead_code,
-    reason = "the playback pump remains inactive until Rust owns runtime audio"
-)]
-
 use core::{fmt, slice};
 use std::io::{self, Read};
 

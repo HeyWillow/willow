@@ -1,10 +1,8 @@
-#include "board.h"
 #include "cJSON.h"
 #include "esp_log.h"
 #include "esp_transport_ws.h"
 #include "esp_websocket_client.h"
 
-#include "audio.h"
 #include "config.h"
 #include "ota.h"
 #include "rust.h"
@@ -56,12 +54,8 @@ void willow_was_event_handler(
                     if (won != NULL && cJSON_IsBool(won)) {
                         if (cJSON_IsFalse(won)) {
                             ESP_LOGI(TAG, "lost wake race, stopping pipelines");
-                            multiwake_won = false;
-                            audio_recorder_trigger_stop(hdl_ar);
-                            goto cleanup;
-                        } else if (config_get_bool("wake_confirmation", DEFAULT_WAKE_CONFIRMATION)) {
-                            play_audio_ok(NULL);
                         }
+                        rust_audio_multiwake_result(cJSON_IsTrue(won));
                     }
                     goto cleanup;
                 }
@@ -73,10 +67,10 @@ void willow_was_event_handler(
                         cJSON *speech = cJSON_GetObjectItemCaseSensitive(json_result, "speech");
                         if (cJSON_IsString(speech) && speech->valuestring != NULL
                             && strlen(speech->valuestring) > 0) {
-                            cJSON_IsTrue(ok) ? war.fn_ok(speech->valuestring) : war.fn_err(speech->valuestring);
+                            rust_audio_play_response(cJSON_IsTrue(ok), speech->valuestring);
                             rust_ui_show_command_result("Response:", speech->valuestring);
                         } else {
-                            cJSON_IsTrue(ok) ? war.fn_ok("Success") : war.fn_err("Error");
+                            rust_audio_play_response(cJSON_IsTrue(ok), cJSON_IsTrue(ok) ? "Success" : "Error");
                             rust_ui_show_command_result("Command status:", cJSON_IsTrue(ok) ? "Success!" : "Error");
                         }
                         rust_display_timer_reset(false);
@@ -141,7 +135,7 @@ void willow_was_event_handler(
                                     ESP_LOGI(TAG, "cancel active notify_task with ID='%" PRIu64 "'", nd->id);
                                     notify_active->cancel = true;
                                     xSemaphoreGive(rust_was_notify_mutex());
-                                    esp_audio_stop(hdl_ea, TERMINATION_TYPE_NOW);
+                                    rust_audio_cancel_playback();
                                     goto cleanup;
                                 }
                                 xSemaphoreGive(rust_was_notify_mutex());
@@ -279,7 +273,7 @@ static void notify_task(void *data)
 
     ESP_LOGI(TAG, "started notify task for notification with ID='%" PRIu64 "'", nd->id);
 
-    rust_ui_show_notification(nd->text, hdl_ea);
+    rust_ui_show_notification(nd->text);
     free(nd->text);
 
     rust_display_timer_reset(true);
@@ -295,28 +289,24 @@ static void notify_task(void *data)
     }
 
     if (nd->audio_url != NULL) {
-        if (hdl_ea == NULL) {
-            ESP_LOGW(TAG, "notify with hdl_ea=NULL, skip audio playback");
-        } else {
-            volume_set(nd->volume);
-            gpio_set_level(get_pa_enable_gpio(), 1);
+        ret = rust_audio_set_volume(nd->volume);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "failed to set notification volume: %s", esp_err_to_name(ret));
         }
 
         for (i = 0; i < nd->repeat; i++) {
             if (nd->cancel || rust_ui_notification_cancelled()) {
                 break;
             }
-            if (hdl_ea != NULL) {
-                esp_audio_sync_play(hdl_ea, nd->audio_url, 0);
-            }
+            rust_audio_play_sync(nd->audio_url);
             vTaskDelay(1000 / portTICK_PERIOD_MS);
         }
 
         free(nd->audio_url);
 
-        if (hdl_ea != NULL) {
-            gpio_set_level(get_pa_enable_gpio(), 0);
-            volume_set(-1);
+        ret = rust_audio_set_volume(-1);
+        if (ret != ESP_OK) {
+            ESP_LOGE(TAG, "failed to restore configured volume: %s", esp_err_to_name(ret));
         }
     }
 

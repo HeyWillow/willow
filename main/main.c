@@ -1,16 +1,10 @@
 #include "esp_err.h"
 #include "esp_log.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
-#include "audio.h"
-#include "config.h"
 #include "main.h"
 #include "rust.h"
-#include "shared.h"
-#include "was.h"
-
-#define DEFAULT_WIS_URL "https://infer.tovera.io/api/willow"
-
-#define I2S_PORT I2S_NUM_0
 
 char was_url[2048];
 static const char *TAG = "WILLOW/MAIN";
@@ -37,8 +31,6 @@ void willow_init(void)
         // wait "indefinitely"
         vTaskDelay(portMAX_DELAY);
     }
-
-    init_audio();
 }
 
 #ifdef WILLOW_CARGO_FIRST

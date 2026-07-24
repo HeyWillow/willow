@@ -1,10 +1,5 @@
 //! Active configuration adapter for the pure audio response policy.
 
-#![allow(
-    dead_code,
-    reason = "the response policy remains inactive until Rust owns runtime audio"
-)]
-
 use log::error;
 use willow_schema::config::v1::AudioResponseType;
 

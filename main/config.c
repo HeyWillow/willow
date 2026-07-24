@@ -5,7 +5,6 @@
 
 #include "esp_log.h"
 
-#include "audio.h"
 #include "config.h"
 #include "rust.h"
 
@@ -50,7 +49,7 @@ int config_get_int(char *key, const int default_value)
 void config_write(const char *data)
 {
     rust_was_deinit();
-    deinit_audio();
+    rust_audio_deinit();
 
     if (!rust_config_write(data)) {
         rust_system_restart_delayed();

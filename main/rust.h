@@ -7,21 +7,19 @@
 #include "esp_err.h"
 #include "esp_websocket_client.h"
 #include "driver/i2c_master.h"
-#include "freertos/queue.h"
 #include "freertos/semphr.h"
 
-QueueHandle_t rust_audio_recorder_queue_handle(void);
-bool rust_audio_is_recording(void);
-esp_err_t rust_audio_session_timer_cancel(void);
-esp_err_t rust_audio_session_timer_reset(void *recorder, uint32_t timeout_secs);
-void rust_audio_set_recording(bool recording);
+void rust_audio_cancel_playback(void);
+void rust_audio_deinit(void);
+void rust_audio_multiwake_result(bool won);
+void rust_audio_play_response(bool ok, const char *text);
+esp_err_t rust_audio_play_sync(const char *uri);
+esp_err_t rust_audio_set_volume(int32_t volume);
 i2c_master_bus_handle_t rust_i2c_master_handle(void);
 void rust_backlight_set(bool on, bool maximum);
 esp_err_t rust_backlight_strobe_start(uint32_t period_ms);
 void rust_backlight_strobe_stop(void);
 esp_err_t rust_display_timer_reset(bool pause);
-bool rust_input_is_muted(void);
-esp_err_t rust_input_monitor_start(int32_t unmute_event);
 bool rust_config_copy_char(const char *key, char *output, size_t output_len);
 int8_t rust_config_get_bool(const char *key);
 intptr_t rust_config_get_char_len(const char *key);
@@ -50,7 +48,7 @@ void rust_ui_show_center_message(const char *message);
 void rust_ui_show_command_result(const char *heading, const char *body);
 void rust_ui_show_error(const char *primary, const char *secondary);
 void rust_ui_show_listening(void);
-void rust_ui_show_notification(const char *message, void *player);
+void rust_ui_show_notification(const char *message);
 void rust_ui_show_ready(const char *message);
 void rust_ui_show_recognition(const char *heading, const char *body);
 void rust_ui_show_thinking(bool multiwake_won);

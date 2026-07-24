@@ -1,10 +1,5 @@
 //! Joint ownership of the full-duplex I2S0 capture and playback channels.
 
-#![allow(
-    dead_code,
-    reason = "the I2S owner remains inactive until the atomic Rust audio cut-over"
-)]
-
 use core::{ffi::c_void, fmt, ptr, ptr::NonNull};
 
 use esp_idf_sys::{
@@ -248,10 +243,6 @@ impl ReceiveChannel {
         self.0.enable()
     }
 
-    pub(super) fn disable(&mut self) -> Result<(), I2sError> {
-        self.0.disable()
-    }
-
     pub(super) fn read(
         &mut self,
         destination: &mut [u8],
@@ -291,10 +282,6 @@ pub(super) struct TransmitChannel(Channel);
 impl TransmitChannel {
     pub(super) fn enable(&mut self) -> Result<(), I2sError> {
         self.0.enable()
-    }
-
-    pub(super) fn disable(&mut self) -> Result<(), I2sError> {
-        self.0.disable()
     }
 
     pub(super) fn write(&mut self, source: &[u8], timeout_ms: u32) -> Result<usize, I2sError> {

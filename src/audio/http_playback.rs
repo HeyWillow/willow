@@ -1,10 +1,5 @@
 //! HTTP(S) streaming source for the bounded playback pump.
 
-#![allow(
-    dead_code,
-    reason = "HTTP playback remains inactive until Rust owns runtime audio"
-)]
-
 use core::{fmt, time::Duration};
 use std::{io, time::Instant};
 

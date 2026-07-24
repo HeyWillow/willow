@@ -1,10 +1,5 @@
 //! Blocking WIS upload worker backed by the bounded PCM record buffer.
 
-#![allow(
-    dead_code,
-    reason = "the upload worker remains inactive until Rust owns runtime audio"
-)]
-
 use core::fmt;
 use std::{
     collections::TryReserveError,

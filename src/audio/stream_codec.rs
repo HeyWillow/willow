@@ -1,10 +1,5 @@
 //! Owned streaming decoder and frame encoder handles.
 
-#![allow(
-    dead_code,
-    reason = "the codec handles remain inactive until the Rust player is connected"
-)]
-
 use core::{
     ffi::{c_int, c_void},
     fmt,

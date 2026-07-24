@@ -1,9 +1,4 @@
-//! Inactive I2S capture and ESP-SR worker for the Rust audio cut-over.
-
-#![allow(
-    dead_code,
-    reason = "the recorder worker remains inactive until Rust owns runtime audio"
-)]
+//! I2S capture and ESP-SR worker for the Rust-owned audio runtime.
 
 use core::{fmt, mem::size_of};
 use std::{

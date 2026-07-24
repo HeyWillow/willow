@@ -1,10 +1,5 @@
 //! Pure command-response audio policy.
 
-#![allow(
-    dead_code,
-    reason = "the response policy remains inactive until Rust owns runtime audio"
-)]
-
 use core::fmt;
 use std::{borrow::Cow, collections::TryReserveError};
 
@@ -169,6 +164,10 @@ fn push_encoded_query_value(destination: &mut String, value: &str) {
 }
 
 #[cfg(test)]
+#[allow(
+    dead_code,
+    reason = "the firmware binary disables Cargo's test harness"
+)]
 mod tests {
     const LEGACY_URL: &str = "https://legacy.example/tts";
 

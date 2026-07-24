@@ -1,10 +1,5 @@
 //! Pure WIS audio-format metadata and PCM frame buffering.
 
-#![allow(
-    dead_code,
-    reason = "WIS streaming remains inactive until Rust owns runtime audio"
-)]
-
 use core::{fmt, mem::size_of};
 use std::{collections::TryReserveError, io};
 
@@ -180,6 +175,10 @@ impl PcmFrameBuffer {
 }
 
 #[cfg(test)]
+#[allow(
+    dead_code,
+    reason = "the firmware binary disables Cargo's test harness"
+)]
 mod tests {
     #[test]
     fn format_header_values_remain_compatible_with_wis() {
