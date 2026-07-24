@@ -4,25 +4,31 @@ mod notification;
 
 use core::{
     ffi::{c_char, c_void},
+    slice, str,
     sync::atomic::{AtomicBool, AtomicPtr, Ordering},
 };
 use std::{
     ffi::{CStr, CString},
-    sync::{Arc, Mutex},
+    sync::{Arc, Mutex, MutexGuard, OnceLock, TryLockError},
 };
 
 use esp_idf_svc::hal::delay::{FreeRtos, TickType};
 use esp_idf_sys::{
-    CONFIG_FREERTOS_NO_AFFINITY, ESP_ERR_INVALID_ARG, ESP_FAIL, ESP_OK, EspError,
-    WAS_RECONNECT_TIMEOUT_MS, esp_efuse_mac_get_default, esp_err_t, esp_event_base_t,
+    CONFIG_FREERTOS_NO_AFFINITY, ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_ERR_NO_MEM,
+    ESP_FAIL, ESP_OK, EspError, esp_efuse_mac_get_default, esp_err_t, esp_event_base_t,
     esp_log_level_set, esp_log_level_t_ESP_LOG_DEBUG, esp_websocket_client,
-    esp_websocket_client_close, esp_websocket_client_config_t,
+    esp_websocket_client_close, esp_websocket_client_config_t, esp_websocket_client_destroy,
     esp_websocket_client_destroy_on_exit, esp_websocket_client_handle_t, esp_websocket_client_init,
     esp_websocket_client_is_connected, esp_websocket_client_send_text, esp_websocket_client_start,
-    esp_websocket_client_stop, esp_websocket_event_id_t_WEBSOCKET_EVENT_ANY,
-    esp_websocket_register_events, vTaskDelete, xTaskCreatePinnedToCore,
+    esp_websocket_client_stop, esp_websocket_event_data_t,
+    esp_websocket_event_id_t_WEBSOCKET_EVENT_ANY, esp_websocket_event_id_t_WEBSOCKET_EVENT_CLOSED,
+    esp_websocket_event_id_t_WEBSOCKET_EVENT_CONNECTED,
+    esp_websocket_event_id_t_WEBSOCKET_EVENT_DATA,
+    esp_websocket_event_id_t_WEBSOCKET_EVENT_DISCONNECTED,
+    esp_websocket_event_id_t_WEBSOCKET_EVENT_FINISH, esp_websocket_register_events, vTaskDelete,
+    ws_transport_opcodes_WS_TRANSPORT_OPCODES_TEXT, xTaskCreatePinnedToCore,
 };
-use log::{error, info, warn};
+use log::{debug, error, info, trace, warn};
 use willow_protocol::{
     was::v1::{
         Command, CommandResult, DeviceIdentity, Event, InboundCommand, InboundMessage,
@@ -38,6 +44,11 @@ const LOG_TARGET: &str = "WILLOW/WAS";
 const DEINIT_DELAY_MS: u32 = 2_000;
 const DEINIT_TASK_PRIORITY: u32 = 5;
 const DEINIT_TASK_STACK_SIZE: u32 = 4_096;
+const EVENT_CLOSED: i32 = esp_websocket_event_id_t_WEBSOCKET_EVENT_CLOSED;
+const EVENT_CONNECTED: i32 = esp_websocket_event_id_t_WEBSOCKET_EVENT_CONNECTED;
+const EVENT_DATA: i32 = esp_websocket_event_id_t_WEBSOCKET_EVENT_DATA;
+const EVENT_DISCONNECTED: i32 = esp_websocket_event_id_t_WEBSOCKET_EVENT_DISCONNECTED;
+const EVENT_FINISH: i32 = esp_websocket_event_id_t_WEBSOCKET_EVENT_FINISH;
 const IDENTIFY_AUDIO_URL: &str = "spiffs://spiffs/user/audio/success.wav";
 const IDENTIFY_TEXT: &str = "WAS Locate Active!";
 const NOTIFICATION_TASK_CORE: i32 = 0;
@@ -48,8 +59,11 @@ const NOTIFICATION_PLAYBACK_DELAY_MS: u32 = 1_000;
 const STOP_TIMEOUT_MS: u64 = 5_000;
 const TASK_CREATED: i32 = 1;
 const USER_AGENT: &str = concat!("Willow/", env!("WILLOW_VERSION"));
+const WAS_RECONNECT_TIMEOUT_MS: i32 = 10_000;
 
 static CLIENT: AtomicPtr<esp_websocket_client> = AtomicPtr::new(core::ptr::null_mut());
+static CLIENT_ACCESS: Mutex<()> = Mutex::new(());
+static SERVER_URL: OnceLock<CString> = OnceLock::new();
 
 struct NotificationJob {
     audio_url: Option<String>,
@@ -71,21 +85,61 @@ struct NotificationTask {
 static NOTIFICATION_RUN: Mutex<()> = Mutex::new(());
 static NOTIFICATION_STATE: NotificationState = NotificationState::new();
 
-unsafe extern "C" {
-    fn willow_was_event_handler(
-        arg: *mut c_void,
-        event_base: esp_event_base_t,
-        event_id: i32,
-        event_data: *mut c_void,
-    );
+fn lock_client_access() -> MutexGuard<'static, ()> {
+    match CLIENT_ACCESS.lock() {
+        Ok(access) => access,
+        Err(poisoned) => poisoned.into_inner(),
+    }
 }
 
-pub(crate) fn client_handle() -> esp_websocket_client_handle_t {
-    CLIENT.load(Ordering::Acquire)
+fn with_client<T>(operation: impl FnOnce(esp_websocket_client_handle_t) -> T) -> Option<T> {
+    let _access = lock_client_access();
+    let client = CLIENT.load(Ordering::Acquire);
+    if client.is_null() {
+        None
+    } else {
+        Some(operation(client))
+    }
+}
+
+fn publish_client(client: esp_websocket_client_handle_t) {
+    let _access = lock_client_access();
+    CLIENT.store(client, Ordering::Release);
+}
+
+fn retire_client(client: esp_websocket_client_handle_t) {
+    // Shutdown clears CLIENT while holding CLIENT_ACCESS before waiting for
+    // FINISH. Retry rather than blocking on the lock so shutdown can publish
+    // the null pointer that tells this callback not to wait for itself.
+    loop {
+        if client.is_null() || CLIENT.load(Ordering::Acquire) != client {
+            return;
+        }
+
+        let _access = match CLIENT_ACCESS.try_lock() {
+            Ok(access) => access,
+            Err(TryLockError::Poisoned(poisoned)) => poisoned.into_inner(),
+            Err(TryLockError::WouldBlock) => {
+                std::thread::yield_now();
+                continue;
+            }
+        };
+        let _ = CLIENT.compare_exchange(
+            client,
+            core::ptr::null_mut(),
+            Ordering::AcqRel,
+            Ordering::Acquire,
+        );
+        return;
+    }
+}
+
+fn client_is_connected() -> bool {
+    with_client(|client| unsafe { esp_websocket_client_is_connected(client) }).unwrap_or(false)
 }
 
 pub(crate) fn is_connected(wait: bool) -> bool {
-    if unsafe { esp_websocket_client_is_connected(client_handle()) } {
+    if client_is_connected() {
         return true;
     }
 
@@ -98,7 +152,7 @@ pub(crate) fn is_connected(wait: bool) -> bool {
     let mut attempt = 0;
     let max = WAS_RECONNECT_TIMEOUT_MS / 1000;
     while attempt < max {
-        if unsafe { esp_websocket_client_is_connected(client_handle()) } {
+        if client_is_connected() {
             return true;
         }
         attempt += 2;
@@ -111,14 +165,15 @@ pub(crate) fn is_connected(wait: bool) -> bool {
 fn send_text(message: &str) -> Result<usize, EspError> {
     let length = i32::try_from(message.len())
         .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
-    let sent = unsafe {
+    let sent = with_client(|client| unsafe {
         esp_websocket_client_send_text(
-            client_handle(),
+            client,
             message.as_ptr().cast(),
             length,
             TickType::new_millis(2_000).0,
         )
-    };
+    })
+    .ok_or_else(EspError::from_infallible::<ESP_ERR_INVALID_STATE>)?;
 
     if sent < 0 {
         Err(EspError::from_infallible::<ESP_FAIL>())
@@ -467,6 +522,81 @@ fn handle_message(message: &str) {
     }
 }
 
+unsafe fn text_payload(data: &esp_websocket_event_data_t) -> Option<&str> {
+    let length = usize::try_from(data.data_len).ok()?;
+    if length == 0 {
+        return Some("");
+    }
+    if data.data_ptr.is_null() {
+        return None;
+    }
+
+    // SAFETY: ESP WebSocket owns a readable payload of data_len bytes for the
+    // duration of this callback.
+    let bytes = unsafe { slice::from_raw_parts(data.data_ptr.cast(), length) };
+    let nul = bytes.iter().position(|byte| *byte == 0).unwrap_or(length);
+    str::from_utf8(&bytes[..nul]).ok()
+}
+
+unsafe extern "C" fn websocket_event_handler(
+    _handler_args: *mut c_void,
+    _event_base: esp_event_base_t,
+    event_id: i32,
+    event_data: *mut c_void,
+) {
+    match event_id {
+        EVENT_CONNECTED => {
+            info!(target: LOG_TARGET, "WebSocket connected");
+            let _ = send_hello();
+            if !config::is_valid() {
+                let _ = request_config();
+            }
+            ui::hide_connecting();
+        }
+        EVENT_DATA => {
+            trace!(target: LOG_TARGET, "WebSocket data received");
+            // SAFETY: ESP WebSocket supplies event data for DATA events.
+            let Some(data) = (unsafe { event_data.cast::<esp_websocket_event_data_t>().as_ref() })
+            else {
+                return;
+            };
+            if u32::from(data.op_code) != ws_transport_opcodes_WS_TRANSPORT_OPCODES_TEXT {
+                return;
+            }
+
+            // SAFETY: the payload belongs to this callback invocation.
+            let Some(message) = (unsafe { text_payload(data) }) else {
+                return;
+            };
+            info!(target: LOG_TARGET, "received text data on WebSocket: {message}");
+            handle_message(message);
+        }
+        EVENT_DISCONNECTED => {
+            info!(target: LOG_TARGET, "WebSocket disconnected");
+        }
+        EVENT_CLOSED => {
+            info!(target: LOG_TARGET, "WebSocket closed");
+            if let Some(url) = SERVER_URL.get() {
+                let _ = initialize_client(url);
+            } else {
+                error!(target: LOG_TARGET, "cannot reconnect without a WAS URL");
+            }
+        }
+        EVENT_FINISH => {
+            // ESP WebSocket frees destroy-on-exit clients immediately after
+            // this callback. Retire this exact allocation only; CLOSED may
+            // already have published its replacement.
+            let Some(data) = (unsafe { event_data.cast::<esp_websocket_event_data_t>().as_ref() })
+            else {
+                error!(target: LOG_TARGET, "WebSocket FINISH event omitted client data");
+                return;
+            };
+            retire_client(data.client);
+        }
+        _ => debug!(target: LOG_TARGET, "unhandled WebSocket event - ID: {event_id}"),
+    }
+}
+
 fn multiwake_enabled() -> bool {
     config::config()
         .and_then(|config| config.multiwake)
@@ -532,7 +662,15 @@ pub(crate) fn send_hello() -> Result<(), EspError> {
 }
 
 fn stop() {
-    let client = client_handle();
+    // Serialize against every raw API call, then unpublish before close waits
+    // for FINISH. The FINISH callback sees the null pointer and does not try
+    // to acquire this lock, so the WebSocket task can exit and free itself.
+    let _access = lock_client_access();
+    let client = CLIENT.swap(core::ptr::null_mut(), Ordering::AcqRel);
+    if client.is_null() {
+        return;
+    }
+
     info!(target: LOG_TARGET, "stopping WebSocket client");
 
     if EspError::from(unsafe {
@@ -613,13 +751,13 @@ pub(crate) fn send_wake_start(wake_volume: f32) -> Result<(), EspError> {
     })
 }
 
-pub(crate) fn initialize(url: &str) -> Result<(), EspError> {
+fn initialize_client(url: &CStr) -> Result<(), EspError> {
     if state::is_restarting() {
         return Ok(());
     }
 
-    let url = CString::new(url).map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
-    let user_agent = CString::new(USER_AGENT).unwrap();
+    let user_agent =
+        CString::new(USER_AGENT).map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
 
     ui::show_connecting("Connecting to WAS...");
 
@@ -634,7 +772,7 @@ pub(crate) fn initialize(url: &str) -> Result<(), EspError> {
 
     let config = esp_websocket_client_config_t {
         buffer_size: 4096,
-        reconnect_timeout_ms: WAS_RECONNECT_TIMEOUT_MS as i32,
+        reconnect_timeout_ms: WAS_RECONNECT_TIMEOUT_MS,
         task_stack: 6 * 1024,
         uri: url.as_ptr(),
         user_agent: user_agent.as_ptr(),
@@ -642,28 +780,46 @@ pub(crate) fn initialize(url: &str) -> Result<(), EspError> {
     };
 
     let client = unsafe { esp_websocket_client_init(&config) };
-    CLIENT.store(client, Ordering::Release);
-
-    if let Some(error) = EspError::from(unsafe { esp_websocket_client_destroy_on_exit(client) }) {
-        warn!(target: LOG_TARGET, "failed to enable destroy on exit: {error}");
+    if client.is_null() {
+        return Err(EspError::from_infallible::<ESP_ERR_NO_MEM>());
     }
 
-    // Preserve the ignored event-registration result from the C initializer.
-    let _ = unsafe {
+    if let Some(error) = EspError::from(unsafe { esp_websocket_client_destroy_on_exit(client) }) {
+        let _ = unsafe { esp_websocket_client_destroy(client) };
+        return Err(error);
+    }
+
+    if let Some(error) = EspError::from(unsafe {
         esp_websocket_register_events(
             client,
             esp_websocket_event_id_t_WEBSOCKET_EVENT_ANY,
-            Some(willow_was_event_handler),
+            Some(websocket_event_handler),
             core::ptr::null_mut(),
         )
-    };
+    }) {
+        let _ = unsafe { esp_websocket_client_destroy(client) };
+        return Err(error);
+    }
+
+    publish_client(client);
 
     if let Some(error) = EspError::from(unsafe { esp_websocket_client_start(client) }) {
+        retire_client(client);
+        let _ = unsafe { esp_websocket_client_destroy(client) };
         error!(target: LOG_TARGET, "failed to start WebSocket client: {error}");
         Err(error)
     } else {
         Ok(())
     }
+}
+
+pub(crate) fn initialize(url: &str) -> Result<(), EspError> {
+    if state::is_restarting() {
+        return Ok(());
+    }
+
+    let url = CString::new(url).map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
+    initialize_client(SERVER_URL.get_or_init(|| url))
 }
 
 /// Initializes the WAS transport from a URL borrowed from retained C startup.
@@ -683,30 +839,6 @@ pub unsafe extern "C" fn rust_was_init(url: *const c_char) -> esp_err_t {
     };
 
     initialize(url).map_or_else(|error| error.code(), |()| ESP_OK)
-}
-
-/// Handles a complete text message for the retained C event callback.
-///
-/// # Safety
-///
-/// `message` must either be null or point to a valid NUL-terminated string for
-/// the duration of this call.
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_was_handle_message(message: *const c_char) {
-    if message.is_null() {
-        return;
-    }
-
-    let Ok(message) = (unsafe { CStr::from_ptr(message) }).to_str() else {
-        return;
-    };
-    handle_message(message);
-}
-
-/// Requests configuration after the retained C event handler connects.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_was_request_config() {
-    let _ = request_config();
 }
 
 /// Wraps a WIS response in the WAS endpoint command envelope.
@@ -744,10 +876,4 @@ pub extern "C" fn rust_was_send_wake_end() {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_was_send_wake_start(wake_volume: f32) {
     let _ = send_wake_start(wake_volume);
-}
-
-/// Sends the device identity after the retained C event handler connects.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_was_send_hello() {
-    let _ = send_hello();
 }
