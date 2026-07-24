@@ -11,7 +11,7 @@ use std::{
     time::Instant,
 };
 
-use esp_idf_sys::{ESP_ERR_HTTP_EAGAIN, ESP_ERR_TIMEOUT};
+use esp_idf_sys::ESP_ERR_TIMEOUT;
 use log::{debug, error, info, warn};
 use willow_protocol::wis::v1::SpeechToTextResponse;
 
@@ -568,7 +568,7 @@ where
             }
             UploadError::Wis {
                 source: WisUploadError::Http { source, .. },
-            } if matches!(source.code(), ESP_ERR_TIMEOUT | ESP_ERR_HTTP_EAGAIN) => {
+            } if matches!(source.code(), ESP_ERR_TIMEOUT | super::HTTP_EAGAIN) => {
                 self.show_upload_failure("WIS timeout", "Check server performance", false);
             }
             UploadError::Wis {

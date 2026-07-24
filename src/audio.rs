@@ -49,6 +49,8 @@ use self::{
 const DEFAULT_MIC_GAIN: u8 = 14;
 const DEFAULT_RECORD_BUFFER_KIB: usize = 12;
 const DEFAULT_SPEAKER_VOLUME: u8 = 60;
+// ESP-IDF's streaming HTTP reads return the negated error constant.
+const HTTP_EAGAIN: i32 = -esp_idf_sys::ESP_ERR_HTTP_EAGAIN;
 const LOG_TARGET: &str = "WILLOW/AUDIO";
 /// Live PCM headroom formerly supplied by the ADF raw-stream writer.
 const WIS_SESSION_BACKLOG_BYTES: usize = 64 * 1024;

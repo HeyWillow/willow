@@ -8,7 +8,7 @@ use esp_idf_svc::{
     http::client::{Configuration, EspHttpConnection, Method},
 };
 use esp_idf_sys::{
-    ESP_ERR_HTTP_EAGAIN, EspError, esp_http_client_auth_type_t_HTTP_AUTH_TYPE_BASIC,
+    EspError, esp_http_client_auth_type_t_HTTP_AUTH_TYPE_BASIC,
     esp_http_client_is_complete_data_received, esp_http_client_set_authtype,
     esp_http_client_set_timeout_ms,
 };
@@ -213,12 +213,12 @@ impl io::Read for HttpReader<'_> {
                 Ok(bytes)
             }
             Err(source)
-                if source.code() == ESP_ERR_HTTP_EAGAIN
+                if source.code() == super::HTTP_EAGAIN
                     && self.last_progress.elapsed() < HTTP_TIMEOUT =>
             {
                 Err(io::Error::new(io::ErrorKind::Interrupted, source))
             }
-            Err(source) if source.code() == ESP_ERR_HTTP_EAGAIN => {
+            Err(source) if source.code() == super::HTTP_EAGAIN => {
                 Err(io::Error::new(io::ErrorKind::TimedOut, source))
             }
             Err(source) => Err(io::Error::other(source)),

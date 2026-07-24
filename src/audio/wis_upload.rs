@@ -1,16 +1,15 @@
 //! Bounded chunked HTTP upload for WIS audio sessions.
 
 use core::{fmt, time::Duration};
-use std::{collections::TryReserveError, io};
+use std::{collections::TryReserveError, io, time::Instant};
 
 use esp_idf_svc::{
     handle::RawHandle,
     http::client::{Configuration, EspHttpConnection, Method},
 };
 use esp_idf_sys::{
-    ESP_ERR_HTTP_EAGAIN, ESP_ERR_TIMEOUT, EspError,
-    esp_http_client_auth_type_t_HTTP_AUTH_TYPE_BASIC, esp_http_client_is_complete_data_received,
-    esp_http_client_set_authtype,
+    ESP_ERR_TIMEOUT, EspError, esp_http_client_auth_type_t_HTTP_AUTH_TYPE_BASIC,
+    esp_http_client_is_complete_data_received, esp_http_client_set_authtype,
 };
 
 use super::{
@@ -330,6 +329,7 @@ fn read_response(
 ) -> Result<Vec<u8>, WisUploadError> {
     let mut body = allocate_response(url)?;
     let mut bytes = 0;
+    let mut last_progress = Instant::now();
     loop {
         ensure_not_cancelled(url, cancelled)?;
         if bytes == body.len() {
@@ -342,6 +342,7 @@ fn read_response(
             Ok(0) => break,
             Ok(read) => {
                 bytes += read;
+                last_progress = Instant::now();
                 if bytes > MAX_RESPONSE_BYTES {
                     return Err(WisUploadError::ResponseTooLarge {
                         url: url.to_owned(),
@@ -349,7 +350,9 @@ fn read_response(
                     });
                 }
             }
-            Err(source) if source.code() == ESP_ERR_HTTP_EAGAIN => {}
+            Err(source)
+                if source.code() == super::HTTP_EAGAIN
+                    && last_progress.elapsed() < HTTP_TIMEOUT => {}
             Err(source) => {
                 return Err(WisUploadError::Http {
                     url: url.to_owned(),
@@ -399,7 +402,7 @@ fn ensure_not_cancelled(url: &str, cancelled: &dyn Fn() -> bool) -> Result<(), W
 fn http_io_error(source: EspError) -> io::Error {
     let kind = match source.code() {
         ESP_ERR_TIMEOUT => io::ErrorKind::TimedOut,
-        ESP_ERR_HTTP_EAGAIN => io::ErrorKind::WouldBlock,
+        super::HTTP_EAGAIN => io::ErrorKind::WouldBlock,
         _ => io::ErrorKind::Other,
     };
     io::Error::new(kind, source)
