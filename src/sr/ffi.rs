@@ -623,7 +623,10 @@ impl Drop for AfeLease {
 }
 
 fn validate_input(input: InputFormat) -> Result<(), SrError> {
-    if input != InputFormat::WILLOW {
+    if !matches!(
+        input,
+        InputFormat::TWO_MICROPHONES | InputFormat::TWO_MICROPHONES_WITH_REFERENCE
+    ) {
         return Err(SrError::UnsupportedInputFormat(input));
     }
     let _ = input.total_channels()?;

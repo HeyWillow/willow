@@ -86,14 +86,20 @@ impl WakeModel {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct InputFormat {
+pub(crate) struct InputFormat {
     sample_rate: u32,
     microphone_channels: usize,
     reference_channels: usize,
 }
 
 impl InputFormat {
-    const WILLOW: Self = Self {
+    pub(crate) const TWO_MICROPHONES: Self = Self {
+        sample_rate: 16_000,
+        microphone_channels: 2,
+        reference_channels: 0,
+    };
+
+    pub(crate) const TWO_MICROPHONES_WITH_REFERENCE: Self = Self {
         sample_rate: 16_000,
         microphone_channels: 2,
         reference_channels: 1,
@@ -221,8 +227,8 @@ pub(crate) struct SpeechFrontend {
 }
 
 impl SpeechFrontend {
-    pub(crate) fn open() -> Result<Self, SpeechError> {
-        let configuration = AfeConfiguration::from_active_config().map_err(SpeechError)?;
+    pub(crate) fn open(input: InputFormat) -> Result<Self, SpeechError> {
+        let configuration = AfeConfiguration::from_active_config(input).map_err(SpeechError)?;
         ffi::Frontend::open(configuration)
             .map(|inner| Self { inner })
             .map_err(SpeechError)

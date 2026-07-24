@@ -17,11 +17,11 @@ pub(super) struct AfeConfiguration {
 }
 
 impl AfeConfiguration {
-    pub(super) fn from_active_config() -> Result<Self, SrError> {
-        Self::from_config(crate::config::config())
+    pub(super) fn from_active_config(input: InputFormat) -> Result<Self, SrError> {
+        Self::from_config(crate::config::config(), input)
     }
 
-    fn from_config(config: Option<&Config>) -> Result<Self, SrError> {
+    fn from_config(config: Option<&Config>, input: InputFormat) -> Result<Self, SrError> {
         let wake_word = config
             .and_then(|config| config.wake_word.as_deref())
             .unwrap_or(DEFAULT_WAKE_WORD);
@@ -34,8 +34,9 @@ impl AfeConfiguration {
 
         Ok(Self {
             model,
-            input: InputFormat::WILLOW,
-            acoustic_echo_cancellation: config.and_then(|config| config.aec).unwrap_or(true),
+            input,
+            acoustic_echo_cancellation: input.reference_channels > 0
+                && config.and_then(|config| config.aec).unwrap_or(true),
             blind_source_separation: config.and_then(|config| config.bss).unwrap_or(true),
             vad_mode: config
                 .and_then(|config| config.vad_mode)

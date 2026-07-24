@@ -10,6 +10,7 @@ use core::{
 use log::error;
 
 use crate::i2c;
+use crate::sr::InputFormat;
 
 use super::{
     board::{self, BoardAudioConfiguration, Es7210Profile, MicrophoneCodec, PlaybackCodec},
@@ -387,6 +388,7 @@ impl MicrophoneDevice {
 }
 
 pub(super) struct BoardCodecDevices {
+    pub(super) afe_input: InputFormat,
     pub(super) microphone: MicrophoneDevice,
     pub(super) playback: CodecInterface,
 }
@@ -401,6 +403,7 @@ impl BoardCodecDevices {
         let playback = new_playback(configuration)?;
         let microphone = new_microphone(configuration)?;
         Ok(Self {
+            afe_input: configuration.afe_input,
             microphone,
             playback,
         })

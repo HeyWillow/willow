@@ -15,7 +15,7 @@ use std::{
 use esp_idf_sys::ESP_ERR_TIMEOUT;
 use log::{error, info, warn};
 
-use crate::sr::{FrameSpec, SpeechError, SpeechFrontend, VadState, WakeState};
+use crate::sr::{FrameSpec, InputFormat, SpeechError, SpeechFrontend, VadState, WakeState};
 
 use super::{
     capture::{self, CaptureFramingError},
@@ -193,6 +193,7 @@ impl CaptureWorker {
     pub(super) fn start(
         receive: ReceiveChannel,
         record_buffer: RecordBuffer,
+        afe_input: InputFormat,
     ) -> Result<Self, CaptureStartError> {
         let (event_sender, event_receiver) = sync_channel(CAPTURE_EVENT_CAPACITY);
         let (startup_sender, startup_receiver) = sync_channel(1);
@@ -205,6 +206,7 @@ impl CaptureWorker {
                 run_worker(
                     receive,
                     record_buffer,
+                    afe_input,
                     &event_sender,
                     &startup_sender,
                     &worker_shutdown,
@@ -260,11 +262,12 @@ fn join_failed_start(worker: JoinHandle<()>) -> Result<(), CaptureStartError> {
 fn run_worker(
     receive: ReceiveChannel,
     record_buffer: RecordBuffer,
+    afe_input: InputFormat,
     events: &SyncSender<CaptureEvent>,
     startup: &SyncSender<Result<(), String>>,
     shutdown: &AtomicBool,
 ) {
-    let mut runtime = match CaptureRuntime::new(receive, record_buffer) {
+    let mut runtime = match CaptureRuntime::new(receive, record_buffer, afe_input) {
         Ok(runtime) => runtime,
         Err(source) => {
             error!(target: LOG_TARGET, "failed to initialize recorder capture: {source:#?}");
@@ -300,10 +303,15 @@ struct CaptureRuntime {
 }
 
 impl CaptureRuntime {
-    fn new(mut receive: ReceiveChannel, record_buffer: RecordBuffer) -> Result<Self, CaptureError> {
+    fn new(
+        mut receive: ReceiveChannel,
+        record_buffer: RecordBuffer,
+        afe_input: InputFormat,
+    ) -> Result<Self, CaptureError> {
         // Open ESP-SR before enabling I2S. Field order then disables and drops
         // RX before AFE/model state during all cleanup paths.
-        let frontend = SpeechFrontend::open().map_err(|source| CaptureError::Speech { source })?;
+        let frontend =
+            SpeechFrontend::open(afe_input).map_err(|source| CaptureError::Speech { source })?;
         let frame = frontend.frame_spec();
         validate_frontend(frame)?;
         let raw_bytes = frame
@@ -353,8 +361,12 @@ impl CaptureRuntime {
         if !self.read_exact(shutdown)? {
             return Ok(());
         }
-        let frames = capture::extract_legacy_afe_inputs(&self.raw, &mut self.afe_input)
-            .map_err(|source| CaptureError::Framing { source })?;
+        let frames = capture::extract_afe_inputs(
+            &self.raw,
+            &mut self.afe_input,
+            self.frame.reference_channels,
+        )
+        .map_err(|source| CaptureError::Framing { source })?;
         if frames != self.frame.feed_samples_per_channel {
             return Err(CaptureError::UnexpectedFrontend { frame: self.frame });
         }
@@ -459,10 +471,13 @@ impl CaptureRuntime {
 }
 
 fn validate_frontend(frame: FrameSpec) -> Result<(), CaptureError> {
+    let expected_inputs = frame
+        .microphone_channels
+        .checked_add(frame.reference_channels);
     let valid = frame.sample_rate == capture::SAMPLE_RATE_HZ
-        && frame.input_channels == capture::LEGACY_AFE_CHANNELS
+        && expected_inputs == Some(frame.input_channels)
         && frame.microphone_channels == capture::MICROPHONE_CHANNELS
-        && frame.reference_channels == 1
+        && frame.reference_channels <= capture::MAX_REFERENCE_CHANNELS
         && frame.feed_samples_per_channel > 0
         && frame.fetch_samples > 0;
     if valid {

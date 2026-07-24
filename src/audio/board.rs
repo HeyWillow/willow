@@ -8,6 +8,7 @@ use esp_idf_sys::{
     i2s_port_t_I2S_NUM_1,
 };
 
+use crate::sr::InputFormat;
 use crate::system::{self, Hardware};
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -47,7 +48,7 @@ pub(super) struct BoardAudioConfiguration {
     pub(super) amplifier_enable_active_high: bool,
     pub(super) mute_gpio: i32,
     pub(super) mute_active_low: bool,
-    pub(super) hardware_aec: bool,
+    pub(super) afe_input: InputFormat,
     pub(super) i2s_port: i2s_port_t,
 }
 
@@ -67,7 +68,7 @@ const ESP32_S3_BOX: BoardAudioConfiguration = BoardAudioConfiguration {
     amplifier_enable_active_high: true,
     mute_gpio: gpio_num_t_GPIO_NUM_1,
     mute_active_low: true,
-    hardware_aec: true,
+    afe_input: InputFormat::TWO_MICROPHONES_WITH_REFERENCE,
     i2s_port: i2s_port_t_I2S_NUM_0,
 };
 
@@ -79,7 +80,7 @@ const ESP32_S3_BOX_LITE: BoardAudioConfiguration = BoardAudioConfiguration {
     amplifier_enable_active_high: true,
     mute_gpio: gpio_num_t_GPIO_NUM_1,
     mute_active_low: true,
-    hardware_aec: false,
+    afe_input: InputFormat::TWO_MICROPHONES_WITH_REFERENCE,
     i2s_port: i2s_port_t_I2S_NUM_0,
 };
 
@@ -94,7 +95,7 @@ const ESP32_S3_BOX_3: BoardAudioConfiguration = BoardAudioConfiguration {
     amplifier_enable_active_high: true,
     mute_gpio: gpio_num_t_GPIO_NUM_1,
     mute_active_low: true,
-    hardware_aec: true,
+    afe_input: InputFormat::TWO_MICROPHONES_WITH_REFERENCE,
     i2s_port: i2s_port_t_I2S_NUM_0,
 };
 
@@ -112,7 +113,7 @@ const M5STACK_CORE_S3: BoardAudioConfiguration = BoardAudioConfiguration {
     amplifier_enable_active_high: true,
     mute_gpio: gpio_num_t_GPIO_NUM_NC,
     mute_active_low: true,
-    hardware_aec: false,
+    afe_input: InputFormat::TWO_MICROPHONES,
     i2s_port: i2s_port_t_I2S_NUM_1,
 };
 

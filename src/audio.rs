@@ -155,6 +155,7 @@ pub(crate) fn initialize() -> Result<(), AudioStartError> {
     })?;
 
     let BoardCodecDevices {
+        afe_input,
         mut microphone,
         playback,
     } = BoardCodecDevices::new()
@@ -169,7 +170,7 @@ pub(crate) fn initialize() -> Result<(), AudioStartError> {
         .map_err(|source| AudioStartError::stage("recorder buffer startup failed", &source))?;
     let upload = UploadWorker::start(record_buffer.clone())
         .map_err(|source| AudioStartError::stage("WIS upload startup failed", &source))?;
-    let capture = CaptureWorker::start(receive, record_buffer)
+    let capture = CaptureWorker::start(receive, record_buffer, afe_input)
         .map_err(|source| AudioStartError::stage("capture startup failed", &source))?;
     let player = Arc::new(
         Player::start(transmit, playback, speaker_volume)
