@@ -164,6 +164,35 @@ ensure_rust() {
     activate_rust
 }
 
+contains_retired_adf_path() {
+    local generated_root="$1"
+
+    if [ ! -d "$generated_root" ]; then
+        return 1
+    fi
+
+    [ -n "$(find "$generated_root" -mindepth 1 \
+        \( -iname '*esp-adf*' -o -iname '*esp_adf*' \
+        -o -iname '*audio_pipeline*' -o -iname '*audio_element*' \
+        -o -iname '*esp_periph*' \) -print -quit)" ]
+}
+
+clean_retired_adf_artifacts() {
+    local cargo_build_root="$WILLOW_PATH/target/xtensa-esp32s3-espidf/release/build"
+    local staged_idf_root="$WILLOW_PATH/build/esp-idf"
+
+    if contains_retired_adf_path "$cargo_build_root"; then
+        echo "Retired ESP-ADF artifacts found; refreshing the esp-idf-sys build"
+        "$CARGO_HOME/bin/cargo" +esp clean -p esp-idf-sys \
+            --release --target xtensa-esp32s3-espidf
+    fi
+
+    if contains_retired_adf_path "$staged_idf_root"; then
+        echo "Removing the obsolete staged ESP-IDF build"
+        rm -rf -- "$staged_idf_root"
+    fi
+}
+
 stage_cargo_build() {
     check_container
 
@@ -201,6 +230,12 @@ stage_cargo_build() {
         echo "Application image is larger than its 3 MiB OTA partition"
         exit 1
     fi
+
+    python3 scripts/check_rust_only_boundary.py \
+        --app "$WILLOW_PATH/build/willow.bin" \
+        --elf "$cargo_elf" \
+        --idf-build "$idf_build_dir" \
+        --staged-build "$WILLOW_PATH/build"
 
     printf '%s\n' \
         '--flash_mode dio' \
@@ -308,6 +343,7 @@ fullclean)
 build)
     check_container
     ensure_rust
+    clean_retired_adf_artifacts
     if [ $2 ]; then
         echo "Adding timestamp to dev build"
         TS=$(date '+%d-%m-%Y_%H:%M:%S')
