@@ -9,15 +9,9 @@ else()
 endif()
 
 set(EXCLUDE_COMPONENTS
-    "adf_utils"
     "app_trace"
-    "battery_service"
-    "bluetooth_service"
     "cmock"
-    "coredump_upload_service"
-    "esp_codec_dev"
     "esp_eth"
-    "esp_event_cast"
     "esp_gdbstub"
     "esp_hid"
     "esp_http_server"
@@ -29,9 +23,7 @@ set(EXCLUDE_COMPONENTS
     "ieee802154"
     "mqtt"
     "openthread"
-    "ota_service"
     "perfmon"
-    "playlist"
     "protobuf-c"
     "protocomm"
     "touch_element"
@@ -41,7 +33,6 @@ set(EXCLUDE_COMPONENTS
     "wifi_provisioning"
 )
 
-include($ENV{ADF_PATH}/CMakeLists.txt)
 include($ENV{IDF_PATH}/tools/cmake/project.cmake)
 
 project(willow)

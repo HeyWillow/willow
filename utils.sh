@@ -12,8 +12,6 @@ export DOCKER_IMAGE="willow:latest"
 export DOCKER_NAME="willow-build"
 export DIST_FILE="build/${dist_filename:-willow-dist.bin}"
 
-export ADF_PATH="$WILLOW_PATH/deps/esp-adf"
-
 export CARGO_HOME="$WILLOW_PATH/deps/cargo"
 export RUSTUP_HOME="$WILLOW_PATH/deps/rustup"
 export PATH="$CARGO_HOME/bin:$PATH"
@@ -119,13 +117,6 @@ check_host(){
 
     echo "You need to run this command from the host - you are in the container"
     exit 1
-}
-
-check_deps() {
-    if [ ! -d deps/esp-adf ]; then
-        echo "You need to run install first"
-        exit 1
-    fi
 }
 
 activate_rust() {
@@ -259,14 +250,6 @@ install() {
         exit 1
     fi
     mkdir -p deps
-    cd deps
-    # Setup ADF
-    git clone https://github.com/espressif/esp-adf.git
-    cd $ADF_PATH
-    git checkout "$ADF_VER"
-    git submodule update --init components/esp-adf-libs
-
-    cd $WILLOW_PATH
     WILLOW_CARGO_FIRST=1 idf.py set-target "$PLATFORM"
 }
 
@@ -309,25 +292,21 @@ case $1 in
 
 config)
     check_container
-    check_deps
     WILLOW_CARGO_FIRST=1 idf.py menuconfig
 ;;
 
 clean)
     check_container
-    check_deps
     clean_cargo_build
 ;;
 
 fullclean)
     check_container
-    check_deps
     clean_cargo_build
 ;;
 
 build)
     check_container
-    check_deps
     ensure_rust
     if [ $2 ]; then
         echo "Adding timestamp to dev build"
@@ -344,7 +323,6 @@ build)
 # for package-scoped cleanup without requiring a full Willow rebuild.
 cargo)
     check_container
-    check_deps
     ensure_rust
     shift
     "$CARGO_HOME/bin/cargo" +esp "$@"
