@@ -328,6 +328,17 @@ cargo)
     "$CARGO_HOME/bin/cargo" +esp "$@"
 ;;
 
+test-rust-host)
+    check_container
+    ensure_rust
+    "$CARGO_HOME/bin/cargo" +"$RUST_STABLE_VERSION" test \
+        --manifest-path host-tests/Cargo.toml \
+        --locked \
+        --target "$RUST_HOST_TARGET" \
+        --all-features \
+        --all-targets
+;;
+
 build-docker|docker-build)
     docker build -t "$DOCKER_IMAGE" .
 ;;
