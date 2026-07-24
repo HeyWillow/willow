@@ -486,6 +486,7 @@ impl<'library> StreamDecoder<'library> {
                 .ok_or(StreamCodecError::DecoderRequiresContainerHeaders { format })?,
             dec_cfg: decoder_configuration,
             cfg_size: configuration_size,
+            use_frame_dec: false,
         };
         let mut handle = ptr::null_mut();
         // SAFETY: all optional configuration values live through this call.
@@ -513,6 +514,7 @@ impl<'library> StreamDecoder<'library> {
         let mut codec_configuration = raw::esp_opus_dec_cfg_t {
             sample_rate: sample_rate_hz,
             channel: channels,
+            frame_duration: raw::esp_opus_dec_frame_duration_t_ESP_OPUS_DEC_FRAME_DURATION_INVALID,
             self_delimited: false,
         };
         Self::open_base(
@@ -751,6 +753,7 @@ fn process_simple_decoder(
         len: input_length,
         eos: end_of_stream,
         consumed: 0,
+        frame_recover: raw::esp_audio_simple_dec_recovery_t_ESP_AUDIO_SIMPLE_DEC_RECOVERY_NONE,
     };
     let mut output_frame = raw::esp_audio_simple_dec_out_t {
         buffer: output.as_mut_ptr(),
@@ -786,6 +789,7 @@ fn process_base_decoder(
         buffer: input.as_mut_ptr(),
         len: input_length,
         consumed: 0,
+        frame_recover: raw::esp_audio_dec_recovery_t_ESP_AUDIO_DEC_RECOVERY_NONE,
     };
     let mut output_frame = raw::esp_audio_dec_out_frame_t {
         buffer: output.as_mut_ptr(),
@@ -794,15 +798,9 @@ fn process_base_decoder(
         decoded_size: 0,
     };
     // SAFETY: the decoder is uniquely borrowed and both writable frames
-    // describe live buffers using their checked lengths. The component's
-    // header incorrectly declares a pointer to its void-pointer handle; its C
-    // implementation and tests pass the handle value itself.
+    // describe live buffers using their checked lengths.
     let status = unsafe {
-        raw::esp_audio_dec_process(
-            handle.as_ptr().cast::<*mut c_void>(),
-            &raw mut input_frame,
-            &raw mut output_frame,
-        )
+        raw::esp_audio_dec_process(handle.as_ptr(), &raw mut input_frame, &raw mut output_frame)
     };
     NativeDecodeProgress {
         status,
