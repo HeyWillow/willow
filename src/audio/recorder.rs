@@ -404,17 +404,9 @@ impl CaptureRuntime {
                 .frontend
                 .fetch()
                 .map_err(|source| CaptureError::Speech { source })?;
-            let write = self
-                .record_buffer
+            self.record_buffer
                 .write(frame.samples)
                 .map_err(|source| CaptureError::Buffer { source })?;
-            if write.dropped_session_samples > 0 {
-                warn!(
-                    target: LOG_TARGET,
-                    "recorder PCM buffer dropped {} active-session samples",
-                    write.dropped_session_samples
-                );
-            }
             (frame.vad_state, frame.wake_state, frame.data_volume_db)
         };
 

@@ -117,14 +117,7 @@ impl std::error::Error for RecordBufferError {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub(super) struct RecordRead {
     pub(super) samples: usize,
-    pub(super) dropped_samples: u64,
     pub(super) end_of_session: bool,
-}
-
-/// Samples displaced by one producer write.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-pub(super) struct RecordWrite {
-    pub(super) dropped_session_samples: u64,
 }
 
 /// Cloneable access to one fixed allocation shared by capture and upload.
@@ -207,11 +200,9 @@ impl RecordBuffer {
         })
     }
 
-    pub(super) fn write(&self, source: &[i16]) -> Result<RecordWrite, RecordBufferError> {
+    pub(super) fn write(&self, source: &[i16]) -> Result<(), RecordBufferError> {
         if source.is_empty() {
-            return Ok(RecordWrite {
-                dropped_session_samples: 0,
-            });
+            return Ok(());
         }
 
         let mut state = self.lock();
@@ -225,15 +216,14 @@ impl RecordBuffer {
             },
         )?;
         let capacity = state.retention_capacity();
-        let dropped_session_samples = if source.len() >= capacity {
+        if source.len() >= capacity {
             let retained = &source[source.len() - capacity..];
             let new_start = next_offset - capacity as u64;
-            let dropped = state.advance_active_for_overwrite(new_start);
+            state.advance_active_for_overwrite(new_start);
             state.samples[..capacity].copy_from_slice(retained);
             state.head = 0;
             state.length = capacity;
             state.start_offset = new_start;
-            dropped
         } else {
             let displaced = state
                 .length
@@ -248,18 +238,15 @@ impl RecordBuffer {
                     samples: displaced,
                 },
             )?;
-            let dropped = state.advance_active_for_overwrite(new_start);
+            state.advance_active_for_overwrite(new_start);
             state.discard_oldest(displaced)?;
             state.append(source)?;
-            dropped
-        };
+        }
         state.next_offset = next_offset;
         drop(state);
         self.shared.changed.notify_all();
 
-        Ok(RecordWrite {
-            dropped_session_samples,
-        })
+        Ok(())
     }
 
     pub(super) fn begin_session(&self) -> Result<RecordSessionId, RecordBufferError> {
@@ -326,28 +313,20 @@ impl RecordBuffer {
                         samples: count,
                     },
                 )?;
-                let dropped_samples = active.dropped_samples;
                 if let Some(active) = state.active.as_mut() {
                     active.cursor = cursor;
-                    active.dropped_samples = 0;
                 }
                 state.discard_oldest(count)?;
                 return Ok(RecordRead {
                     samples: count,
-                    dropped_samples,
                     end_of_session: active.finish.is_some_and(|finish| cursor >= finish),
                 });
             }
             if let Some(finish) = active.finish
                 && active.cursor >= finish
             {
-                let dropped_samples = active.dropped_samples;
-                if let Some(active) = state.active.as_mut() {
-                    active.dropped_samples = 0;
-                }
                 return Ok(RecordRead {
                     samples: 0,
-                    dropped_samples,
                     end_of_session: true,
                 });
             }
@@ -361,7 +340,7 @@ impl RecordBuffer {
     pub(super) fn complete_session(
         &self,
         session: RecordSessionId,
-    ) -> Result<(), RecordBufferError> {
+    ) -> Result<u64, RecordBufferError> {
         let mut state = self.lock();
         validate_session(&state, session)?;
         let active = state.active.ok_or(RecordBufferError::InternalInvariant(
@@ -370,12 +349,13 @@ impl RecordBuffer {
         if active.finish.is_none_or(|finish| active.cursor < finish) {
             return Err(RecordBufferError::SessionNotFinished { session });
         }
+        let dropped_samples = active.dropped_samples;
         state.active = None;
         state.trim_idle_history()?;
-        Ok(())
+        Ok(dropped_samples)
     }
 
-    pub(super) fn abort_session(&self, session: RecordSessionId) -> Result<(), RecordBufferError> {
+    pub(super) fn abort_session(&self, session: RecordSessionId) -> Result<u64, RecordBufferError> {
         let mut state = self.lock();
         validate_session(&state, session)?;
         let active = state.active.ok_or(RecordBufferError::InternalInvariant(
@@ -389,9 +369,10 @@ impl RecordBuffer {
             discard,
             "aborted session length does not fit usize",
         )?)?;
+        let dropped_samples = active.dropped_samples;
         state.active = None;
         state.trim_idle_history()?;
-        Ok(())
+        Ok(dropped_samples)
     }
 
     pub(super) fn shutdown(&self) {
@@ -481,16 +462,15 @@ impl State {
         Ok(())
     }
 
-    fn advance_active_for_overwrite(&mut self, new_start: u64) -> u64 {
+    fn advance_active_for_overwrite(&mut self, new_start: u64) {
         let Some(active) = self.active.as_mut() else {
-            return 0;
+            return;
         };
         let session_boundary = active.finish.unwrap_or(new_start);
         let advanced_cursor = new_start.min(session_boundary).max(active.cursor);
         let dropped = advanced_cursor - active.cursor;
         active.cursor = advanced_cursor;
         active.dropped_samples = active.dropped_samples.saturating_add(dropped);
-        dropped
     }
 }
 
@@ -540,14 +520,12 @@ mod tests {
     #[test]
     fn idle_history_keeps_only_the_newest_samples() {
         let buffer = buffer(4);
-        let write = buffer.write(&[1, 2, 3, 4, 5]).expect("write should fit");
-        assert_eq!(write.dropped_session_samples, 0);
+        buffer.write(&[1, 2, 3, 4, 5]).expect("write should fit");
 
         let session = buffer.begin_session().expect("session should start");
         let mut samples = [0_i16; 4];
         let read = finish_and_read(&buffer, session, &mut samples);
         assert_eq!(read.samples, 4);
-        assert_eq!(read.dropped_samples, 0);
         assert!(read.end_of_session);
         assert_eq!(samples, [2, 3, 4, 5]);
     }
@@ -555,10 +533,9 @@ mod tests {
     #[test]
     fn session_backlog_does_not_expand_idle_history() {
         let buffer = buffer_with_backlog(4, 4);
-        let write = buffer
+        buffer
             .write(&[1, 2, 3, 4, 5, 6])
             .expect("idle history should write");
-        assert_eq!(write.dropped_session_samples, 0);
 
         let session = buffer.begin_session().expect("session should start");
         let mut samples = [0_i16; 4];
@@ -591,15 +568,13 @@ mod tests {
             .write(&[1, 2, 3, 4])
             .expect("full pre-roll should write");
         let session = buffer.begin_session().expect("session should start");
-        let write = buffer
+        buffer
             .write(&[5, 6, 7, 8])
             .expect("live backlog should write");
-        assert_eq!(write.dropped_session_samples, 0);
 
         let mut samples = [0_i16; 8];
         let read = finish_and_read(&buffer, session, &mut samples);
         assert_eq!(read.samples, 8);
-        assert_eq!(read.dropped_samples, 0);
         assert_eq!(samples, [1, 2, 3, 4, 5, 6, 7, 8]);
     }
 
@@ -660,14 +635,30 @@ mod tests {
         let buffer = buffer(4);
         buffer.write(&[1, 2]).expect("pre-roll should write");
         let session = buffer.begin_session().expect("session should start");
-        let write = buffer.write(&[3, 4, 5]).expect("live audio should write");
-        assert_eq!(write.dropped_session_samples, 1);
+        buffer.write(&[3, 4, 5]).expect("live audio should write");
 
         let mut samples = [0_i16; 4];
         let read = finish_and_read(&buffer, session, &mut samples);
         assert_eq!(read.samples, 4);
-        assert_eq!(read.dropped_samples, 1);
         assert_eq!(samples, [2, 3, 4, 5]);
+        let dropped = buffer
+            .complete_session(session)
+            .expect("drained session should complete");
+        assert_eq!(dropped, 1);
+    }
+
+    #[test]
+    fn abort_reports_aggregate_lost_samples() {
+        let buffer = buffer(4);
+        buffer.write(&[1, 2]).expect("pre-roll should write");
+        let failed = buffer.begin_session().expect("session should start");
+        buffer.write(&[3, 4, 5]).expect("live audio should write");
+        buffer.write(&[6, 7]).expect("more live audio should write");
+
+        let dropped = buffer
+            .abort_session(failed)
+            .expect("active session should abort");
+        assert_eq!(dropped, 3);
     }
 
     #[test]

@@ -17,6 +17,7 @@ mod pcm;
 mod playback;
 mod player;
 mod record_buffer;
+mod record_upload;
 mod recorder;
 mod recorder_credit;
 mod recorder_state;
