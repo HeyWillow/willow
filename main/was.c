@@ -3,7 +3,6 @@
 #include "esp_transport_ws.h"
 #include "esp_websocket_client.h"
 
-#include "config.h"
 #include "ota.h"
 #include "rust.h"
 #include "shared.h"
@@ -82,7 +81,7 @@ void willow_was_event_handler(
                 if (cJSON_IsObject(json_config)) {
                     char *config = cJSON_Print(json_config);
                     ESP_LOGI(TAG, "found config in WebSocket message: %s", config);
-                    config_write(config);
+                    rust_config_write(config);
                     cJSON_free(config);
                     goto cleanup;
                 }
