@@ -1,5 +1,20 @@
 menu "Willow Configuration"
 
+choice WILLOW_HARDWARE
+    prompt "Willow hardware"
+    default ESP32_S3_BOX_3_BOARD
+
+config ESP32_S3_BOX_BOARD
+    bool "ESP32-S3-BOX"
+
+config ESP32_S3_BOX_LITE_BOARD
+    bool "ESP32-S3-BOX-Lite"
+
+config ESP32_S3_BOX_3_BOARD
+    bool "ESP32-S3-BOX-3"
+
+endchoice
+
 config WIFI_SSID
     string "WiFi SSID"
     depends on !WILLOW_ETHERNET

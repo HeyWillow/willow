@@ -23,6 +23,26 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.9.5
+  espressif/esp_audio_codec:
+    component_hash: 79afebebc48506e3dcb8c5e1fd082bb483f913dbe6ebed0996355fc2ab2a3d6a
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.4'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 2.0.0
+  espressif/esp_codec_dev:
+    component_hash: c6f0436538a956cc3f9c418df50829192dbb7f1f6b3012d23c7a4312d0ea18c7
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=4.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.3.1
   espressif/esp_lcd_touch:
     component_hash: 3f85a7d95af876f1a6ecca8eb90a81614890d0f03a038390804e5a77e2caf862
     dependencies:
@@ -71,16 +91,6 @@ dependencies:
       registry_url: https://components.espressif.com/
       type: service
     version: 1.4.0
-  espressif/jsmn:
-    component_hash: d80350c41bbaa827c98a25b6072df00884e72f54885996fab4a4f0aebce6b6c3
-    dependencies:
-    - name: idf
-      require: private
-      version: '>=4.3'
-    source:
-      registry_url: https://components.espressif.com/
-      type: service
-    version: 1.1.0
   espressif/nghttp:
     component_hash: 32e513409ddce0000990ec74b0711f535462726236d72578cd70498e6bd66dc3
     dependencies:
@@ -98,12 +108,13 @@ dependencies:
 direct_dependencies:
 - espressif/esp-dsp
 - espressif/esp-sr
+- espressif/esp_audio_codec
+- espressif/esp_codec_dev
 - espressif/esp_lcd_touch_gt911
 - espressif/esp_lcd_touch_tt21100
 - espressif/esp_websocket_client
-- espressif/jsmn
 - espressif/nghttp
 - idf
-manifest_hash: dbd6ae436bca49ceee774244795acc0f5266cf64fd5914beaf836655bc98ca99
+manifest_hash: 386e8f17341325003e997aa4286c4f7906fef3495f7f58e109486b77dfd51709
 target: esp32s3
 version: 2.0.0

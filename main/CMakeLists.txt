@@ -5,19 +5,17 @@ idf_component_register(
         "."
     PRIV_REQUIRES
         app_update
-        audio_board
-        audio_hal
-        audio_pipeline
-        audio_recorder
-        audio_sal
-        audio_stream
         esp_audio_codec
         esp_codec_dev
         esp_eth
         esp_http_client
-        esp_peripherals
+        esp_netif
         esp_websocket_client
+        esp_wifi
+        fatfs
+        nvs_flash
         spiffs
+        wear_levelling
 )
 
 if(NOT DEFINED ENV{WILLOW_CARGO_FIRST})
