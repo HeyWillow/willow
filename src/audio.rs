@@ -17,6 +17,8 @@ mod pcm;
 mod playback;
 mod player;
 mod record_buffer;
+mod recorder;
+mod recorder_credit;
 mod recorder_state;
 mod response;
 mod response_config;

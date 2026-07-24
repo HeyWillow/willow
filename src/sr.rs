@@ -109,46 +109,46 @@ impl InputFormat {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct FrameSpec {
-    sample_rate: u32,
-    input_channels: usize,
-    microphone_channels: usize,
-    reference_channels: usize,
-    feed_samples_per_channel: usize,
-    fetch_samples: usize,
+pub(crate) struct FrameSpec {
+    pub(crate) sample_rate: u32,
+    pub(crate) input_channels: usize,
+    pub(crate) microphone_channels: usize,
+    pub(crate) reference_channels: usize,
+    pub(crate) feed_samples_per_channel: usize,
+    pub(crate) fetch_samples: usize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct FeedStatus {
-    runtime_return: i32,
+pub(crate) struct FeedStatus {
+    pub(crate) runtime_return: i32,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum VadState {
+pub(crate) enum VadState {
     Silence,
     Speech,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-struct WakeDetection {
+pub(crate) struct WakeDetection {
     wake_word_index_one_based: usize,
     wakenet_model_index_one_based: usize,
     wake_word_samples: usize,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum WakeState {
+pub(crate) enum WakeState {
     None,
     Detected(WakeDetection),
     ChannelVerified { trigger_output_channel_id: i32 },
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
-struct FetchedFrame<'a> {
-    samples: &'a [i16],
-    data_volume_db: f32,
-    vad_state: VadState,
-    wake_state: WakeState,
+pub(crate) struct FetchedFrame<'a> {
+    pub(crate) samples: &'a [i16],
+    pub(crate) data_volume_db: f32,
+    pub(crate) vad_state: VadState,
+    pub(crate) wake_state: WakeState,
 }
 
 #[derive(Debug)]
@@ -216,30 +216,48 @@ impl fmt::Display for AfeRuntimeError {
     }
 }
 
-struct SpeechFrontend {
+pub(crate) struct SpeechFrontend {
     inner: ffi::Frontend,
 }
 
 impl SpeechFrontend {
-    fn open() -> Result<Self, SrError> {
-        let configuration = AfeConfiguration::from_active_config()?;
-        ffi::Frontend::open(configuration).map(|inner| Self { inner })
+    pub(crate) fn open() -> Result<Self, SpeechError> {
+        let configuration = AfeConfiguration::from_active_config().map_err(SpeechError)?;
+        ffi::Frontend::open(configuration)
+            .map(|inner| Self { inner })
+            .map_err(SpeechError)
     }
 
-    const fn frame_spec(&self) -> FrameSpec {
+    pub(crate) const fn frame_spec(&self) -> FrameSpec {
         self.inner.frame_spec()
     }
 
-    const fn model_index(&self) -> usize {
+    pub(crate) const fn model_index(&self) -> usize {
         self.inner.model_index()
     }
 
-    fn feed(&mut self, samples: &[i16]) -> Result<FeedStatus, SrError> {
-        self.inner.feed(samples)
+    pub(crate) fn feed(&mut self, samples: &[i16]) -> Result<FeedStatus, SpeechError> {
+        self.inner.feed(samples).map_err(SpeechError)
     }
 
-    fn fetch(&mut self) -> Result<FetchedFrame<'_>, SrError> {
-        self.inner.fetch()
+    pub(crate) fn fetch(&mut self) -> Result<FetchedFrame<'_>, SpeechError> {
+        self.inner.fetch().map_err(SpeechError)
+    }
+}
+
+/// Opaque error returned by the safe ESP-SR frontend.
+#[derive(Debug)]
+pub(crate) struct SpeechError(SrError);
+
+impl fmt::Display for SpeechError {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.0.fmt(formatter)
+    }
+}
+
+impl std::error::Error for SpeechError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        Some(&self.0)
     }
 }
 
