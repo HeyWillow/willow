@@ -1150,17 +1150,6 @@ pub unsafe extern "C" fn rust_ui_show_error(primary: *const c_char, secondary: *
 }
 
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ui_show_command_result(heading: *const c_char, body: *const c_char) {
-    let Some(heading) = (unsafe { text(heading) }) else {
-        return;
-    };
-    let Some(body) = (unsafe { text(body) }) else {
-        return;
-    };
-    show_command_result(&heading, &body);
-}
-
-#[unsafe(no_mangle)]
 pub unsafe extern "C" fn rust_ui_show_recognition(heading: *const c_char, body: *const c_char) {
     let Some(heading) = (unsafe { text(heading) }) else {
         return;

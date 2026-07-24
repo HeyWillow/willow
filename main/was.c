@@ -43,38 +43,11 @@ void willow_was_event_handler(
             if (data->op_code == WS_TRANSPORT_OPCODES_TEXT) {
                 char *resp = strndup((char *)data->data_ptr, data->data_len);
                 ESP_LOGI(TAG, "received text data on WebSocket: %s", resp);
+                if (rust_was_handle_results(resp)) {
+                    free(resp);
+                    break;
+                }
                 cJSON *cjson = cJSON_Parse(resp);
-
-                // latency sensitive so handle this first
-                cJSON *json_wake_result = cJSON_GetObjectItemCaseSensitive(cjson, "wake_result");
-                if (cJSON_IsObject(json_wake_result)) {
-                    cJSON *won = cJSON_GetObjectItemCaseSensitive(json_wake_result, "won");
-                    if (won != NULL && cJSON_IsBool(won)) {
-                        if (cJSON_IsFalse(won)) {
-                            ESP_LOGI(TAG, "lost wake race, stopping pipelines");
-                        }
-                        rust_audio_multiwake_result(cJSON_IsTrue(won));
-                    }
-                    goto cleanup;
-                }
-
-                cJSON *json_result = cJSON_GetObjectItemCaseSensitive(cjson, "result");
-                if (cJSON_IsObject(json_result)) {
-                    cJSON *ok = cJSON_GetObjectItemCaseSensitive(json_result, "ok");
-                    if (ok != NULL && cJSON_IsBool(ok)) {
-                        cJSON *speech = cJSON_GetObjectItemCaseSensitive(json_result, "speech");
-                        if (cJSON_IsString(speech) && speech->valuestring != NULL
-                            && strlen(speech->valuestring) > 0) {
-                            rust_audio_play_response(cJSON_IsTrue(ok), speech->valuestring);
-                            rust_ui_show_command_result("Response:", speech->valuestring);
-                        } else {
-                            rust_audio_play_response(cJSON_IsTrue(ok), cJSON_IsTrue(ok) ? "Success" : "Error");
-                            rust_ui_show_command_result("Command status:", cJSON_IsTrue(ok) ? "Success!" : "Error");
-                        }
-                        rust_display_timer_reset(false);
-                    }
-                    goto cleanup;
-                }
 
                 cJSON *json_config = cJSON_GetObjectItemCaseSensitive(cjson, "config");
                 if (cJSON_IsObject(json_config)) {

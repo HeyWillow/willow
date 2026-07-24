@@ -26,9 +26,9 @@ use esp_idf_sys::{
 use log::{error, info, warn};
 use serde_json::Value;
 
-use crate::{config, net, state, system, ui};
+use crate::{audio, backlight, config, net, state, system, ui};
 
-use self::protocol::{Command, DeviceIdentity, Event};
+use self::protocol::{Command, CommandResult, DeviceIdentity, Event, InboundMessage, WakeResult};
 
 const LOG_TARGET: &str = "WILLOW/WAS";
 const DEINIT_DELAY_MS: u32 = 2_000;
@@ -146,6 +146,57 @@ pub(crate) fn request_config() -> Result<(), EspError> {
     send_text(&message).map(|_| ()).inspect_err(|_| {
         error!(target: LOG_TARGET, "failed to send WAS get_config message");
     })
+}
+
+fn handle_wake_result(result: &WakeResult) {
+    let Some(won) = result.won else {
+        return;
+    };
+
+    if !won {
+        info!(target: LOG_TARGET, "lost wake race, stopping pipelines");
+    }
+    if let Err(source) = audio::multiwake_result(won) {
+        error!(target: LOG_TARGET, "failed to apply multiwake result: {source:#?}");
+    }
+}
+
+fn handle_command_result(result: &CommandResult) {
+    let Some(ok) = result.ok else {
+        return;
+    };
+
+    let speech = result.speech.as_deref().filter(|speech| !speech.is_empty());
+    let audio_text = speech.unwrap_or(if ok { "Success" } else { "Error" });
+    if let Err(source) = audio::play_response(ok, Some(audio_text)) {
+        error!(target: LOG_TARGET, "failed to play command response: {source:#?}");
+    }
+
+    if let Some(speech) = speech {
+        ui::show_command_result("Response:", speech);
+    } else {
+        ui::show_command_result("Command status:", if ok { "Success!" } else { "Error" });
+    }
+
+    if let Err(error) = backlight::reset_display_timer(false) {
+        error!(target: LOG_TARGET, "failed to reset display timer: {error:#?}");
+    }
+}
+
+fn handle_results(message: &str) -> bool {
+    let Ok(message) = serde_json::from_str::<InboundMessage>(message) else {
+        return false;
+    };
+
+    if let Some(result) = message.wake_result.as_ref() {
+        handle_wake_result(result);
+        true
+    } else if let Some(result) = message.result.as_ref() {
+        handle_command_result(result);
+        true
+    } else {
+        false
+    }
 }
 
 fn multiwake_enabled() -> bool {
@@ -380,6 +431,24 @@ pub extern "C" fn rust_was_client_handle() -> esp_websocket_client_handle_t {
 #[unsafe(no_mangle)]
 pub extern "C" fn rust_was_is_connected(wait: bool) -> bool {
     is_connected(wait)
+}
+
+/// Handles result messages before the retained C parser sees other messages.
+///
+/// # Safety
+///
+/// `message` must either be null or point to a valid NUL-terminated string for
+/// the duration of this call.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn rust_was_handle_results(message: *const c_char) -> bool {
+    if message.is_null() {
+        return false;
+    }
+
+    let Ok(message) = (unsafe { CStr::from_ptr(message) }).to_str() else {
+        return false;
+    };
+    handle_results(message)
 }
 
 /// Returns the firmware-lifetime mutex borrowed by the retained C notification

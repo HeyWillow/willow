@@ -11,8 +11,6 @@
 
 void rust_audio_cancel_playback(void);
 void rust_audio_deinit(void);
-void rust_audio_multiwake_result(bool won);
-void rust_audio_play_response(bool ok, const char *text);
 esp_err_t rust_audio_play_sync(const char *uri);
 esp_err_t rust_audio_set_volume(int32_t volume);
 i2c_master_bus_handle_t rust_i2c_master_handle(void);
@@ -31,6 +29,7 @@ esp_websocket_client_handle_t rust_was_client_handle(void);
 void rust_was_deinit(void);
 esp_err_t rust_was_init(const char *url);
 bool rust_was_is_connected(bool wait);
+bool rust_was_handle_results(const char *message);
 SemaphoreHandle_t rust_was_notify_mutex(void);
 void rust_was_request_config(void);
 esp_err_t rust_was_send_endpoint(const char *json);
@@ -41,7 +40,6 @@ void rust_ui_hide_connecting(void);
 void rust_ui_notification_end(void);
 bool rust_ui_notification_cancelled(void);
 void rust_ui_show_center_message(const char *message);
-void rust_ui_show_command_result(const char *heading, const char *body);
 void rust_ui_show_error(const char *primary, const char *secondary);
 void rust_ui_show_listening(void);
 void rust_ui_show_notification(const char *message);

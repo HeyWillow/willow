@@ -339,21 +339,6 @@ pub extern "C" fn rust_audio_deinit() {
 }
 
 #[unsafe(no_mangle)]
-pub extern "C" fn rust_audio_multiwake_result(won: bool) {
-    if let Err(source) = multiwake_result(won) {
-        error!(target: LOG_TARGET, "failed to apply multiwake result: {source:#?}");
-    }
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_audio_play_response(ok: bool, text_pointer: *const c_char) {
-    let text = unsafe { text(text_pointer) };
-    if let Err(source) = play_response(ok, text.as_deref()) {
-        error!(target: LOG_TARGET, "failed to play command response: {source:#?}");
-    }
-}
-
-#[unsafe(no_mangle)]
 pub extern "C" fn rust_audio_cancel_playback() {
     if let Err(source) = cancel_playback() {
         error!(target: LOG_TARGET, "failed to cancel playback: {source:#?}");
