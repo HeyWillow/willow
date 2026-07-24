@@ -30,13 +30,9 @@ mod wis_encoder;
 mod wis_framing;
 mod wis_upload;
 
-use core::{ffi::c_char, fmt};
-use std::{
-    ffi::CStr,
-    sync::{Arc, Mutex, MutexGuard},
-};
+use core::fmt;
+use std::sync::{Arc, Mutex, MutexGuard};
 
-use esp_idf_sys::{ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_FAIL, ESP_OK, esp_err_t};
 use log::{error, info};
 
 use self::{
@@ -312,43 +308,4 @@ fn wake_help() -> &'static str {
             "Ready!"
         }
     }
-}
-
-unsafe fn text(pointer: *const c_char) -> Option<String> {
-    (!pointer.is_null()).then(|| {
-        unsafe { CStr::from_ptr(pointer) }
-            .to_string_lossy()
-            .into_owned()
-    })
-}
-
-fn ffi_result(result: Result<(), AudioError>) -> esp_err_t {
-    match result {
-        Ok(()) => ESP_OK,
-        Err(AudioError::NotInitialized) => ESP_ERR_INVALID_STATE,
-        Err(source) => {
-            error!(target: LOG_TARGET, "audio command from C failed: {source:#?}");
-            ESP_FAIL
-        }
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_audio_cancel_playback() {
-    if let Err(source) = cancel_playback() {
-        error!(target: LOG_TARGET, "failed to cancel playback: {source:#?}");
-    }
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_audio_set_volume(volume: i32) -> esp_err_t {
-    ffi_result(set_volume((volume >= 0).then_some(volume)))
-}
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_audio_play_sync(uri: *const c_char) -> esp_err_t {
-    let Some(uri) = (unsafe { text(uri) }) else {
-        return ESP_ERR_INVALID_ARG;
-    };
-    ffi_result(play_sync(&uri))
 }

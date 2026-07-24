@@ -11,7 +11,7 @@ use std::{
 
 use esp_idf_svc::hal::{delay::BLOCK, task::queue::Queue};
 use esp_idf_sys::{
-    ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_FAIL, ESP_OK, EspError, esp_err_t,
+    ESP_ERR_INVALID_ARG, ESP_ERR_INVALID_STATE, ESP_FAIL, EspError, esp_err_t,
     gpio_num_t_GPIO_NUM_45, gpio_num_t_GPIO_NUM_47, ledc_channel_config, ledc_channel_config_t,
     ledc_channel_t_LEDC_CHANNEL_1, ledc_fade_func_install, ledc_intr_type_t_LEDC_INTR_DISABLE,
     ledc_mode_t_LEDC_LOW_SPEED_MODE, ledc_set_duty_and_update, ledc_timer_bit_t_LEDC_TIMER_10_BIT,
@@ -301,7 +301,7 @@ fn strobe(period: Duration, stop: Receiver<()>) {
     }
 }
 
-fn start_strobe(period_ms: u32) -> Result<(), EspError> {
+pub(crate) fn start_strobe(period_ms: u32) -> Result<(), EspError> {
     let mut active = STROBE.lock().unwrap_or_else(PoisonError::into_inner);
     if active.is_some() {
         return Err(EspError::from_infallible::<ESP_ERR_INVALID_STATE>());
@@ -326,7 +326,7 @@ fn start_strobe(period_ms: u32) -> Result<(), EspError> {
     Ok(())
 }
 
-fn stop_strobe() {
+pub(crate) fn stop_strobe() {
     let mut active = STROBE.lock().unwrap_or_else(PoisonError::into_inner);
     let Some(strobe) = active.take() else {
         return;
@@ -337,34 +337,4 @@ fn stop_strobe() {
         error!(target: LOG_TARGET, "backlight strobe task panicked");
     }
     set(true, false);
-}
-
-/// Selects the configured, maximum, or off backlight duty.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_backlight_set(on: bool, maximum: bool) {
-    set(on, maximum);
-}
-
-/// Stops the display timer and optionally schedules its next timeout.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_display_timer_reset(pause: bool) -> esp_err_t {
-    match reset_display_timer(pause) {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
-    }
-}
-
-/// Starts a Rust-owned task that alternates the maximum and off duties.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_backlight_strobe_start(period_ms: u32) -> esp_err_t {
-    match start_strobe(period_ms) {
-        Ok(()) => ESP_OK,
-        Err(error) => error.code(),
-    }
-}
-
-/// Stops the active strobe task and restores the configured brightness.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_backlight_strobe_stop() {
-    stop_strobe();
 }

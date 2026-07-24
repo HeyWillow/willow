@@ -1169,19 +1169,3 @@ pub unsafe extern "C" fn rust_ui_show_ready(message: *const c_char) {
         show_ready(&message);
     }
 }
-
-#[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_ui_show_notification(message: *const c_char) {
-    let message = unsafe { text(message) };
-    show_notification(message.as_deref());
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_ui_notification_cancelled() -> bool {
-    notification_cancelled()
-}
-
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_ui_notification_end() {
-    notification_end();
-}

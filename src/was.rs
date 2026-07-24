@@ -1,54 +1,75 @@
 //! Willow Application Server transport ownership.
 
+mod notification;
 mod protocol;
 
 use core::{
     ffi::{c_char, c_void},
-    sync::atomic::{AtomicPtr, Ordering},
+    sync::atomic::{AtomicBool, AtomicPtr, Ordering},
 };
 use std::{
     ffi::{CStr, CString},
-    sync::OnceLock,
+    sync::{Arc, Mutex},
 };
 
 use esp_idf_svc::hal::delay::{FreeRtos, TickType};
 use esp_idf_sys::{
-    CONFIG_FREERTOS_NO_AFFINITY, ESP_ERR_INVALID_ARG, ESP_ERR_NO_MEM, ESP_FAIL, ESP_OK, EspError,
-    SemaphoreHandle_t, WAS_RECONNECT_TIMEOUT_MS, WILLOW_QUEUE_TYPE_MUTEX,
-    esp_efuse_mac_get_default, esp_err_t, esp_event_base_t, esp_log_level_set,
-    esp_log_level_t_ESP_LOG_DEBUG, esp_websocket_client, esp_websocket_client_close,
-    esp_websocket_client_config_t, esp_websocket_client_destroy_on_exit,
-    esp_websocket_client_handle_t, esp_websocket_client_init, esp_websocket_client_is_connected,
-    esp_websocket_client_send_text, esp_websocket_client_start, esp_websocket_client_stop,
-    esp_websocket_event_id_t_WEBSOCKET_EVENT_ANY, esp_websocket_register_events, vTaskDelete,
-    xQueueCreateMutex, xTaskCreatePinnedToCore,
+    CONFIG_FREERTOS_NO_AFFINITY, ESP_ERR_INVALID_ARG, ESP_FAIL, ESP_OK, EspError,
+    WAS_RECONNECT_TIMEOUT_MS, esp_efuse_mac_get_default, esp_err_t, esp_event_base_t,
+    esp_log_level_set, esp_log_level_t_ESP_LOG_DEBUG, esp_websocket_client,
+    esp_websocket_client_close, esp_websocket_client_config_t,
+    esp_websocket_client_destroy_on_exit, esp_websocket_client_handle_t, esp_websocket_client_init,
+    esp_websocket_client_is_connected, esp_websocket_client_send_text, esp_websocket_client_start,
+    esp_websocket_client_stop, esp_websocket_event_id_t_WEBSOCKET_EVENT_ANY,
+    esp_websocket_register_events, vTaskDelete, xTaskCreatePinnedToCore,
 };
 use log::{error, info, warn};
 use serde_json::Value;
 
 use crate::{audio, backlight, config, net, nvs, ota, state, system, ui};
 
+use self::notification::{CancelOutcome, NotificationLease, NotificationState};
 use self::protocol::{
-    Command, CommandResult, DeviceIdentity, Event, InboundCommand, InboundMessage, WakeResult,
+    Command, CommandResult, DeviceIdentity, Event, InboundCommand, InboundMessage, Notification,
+    WakeResult,
 };
 
 const LOG_TARGET: &str = "WILLOW/WAS";
 const DEINIT_DELAY_MS: u32 = 2_000;
 const DEINIT_TASK_PRIORITY: u32 = 5;
 const DEINIT_TASK_STACK_SIZE: u32 = 4_096;
+const IDENTIFY_AUDIO_URL: &str = "spiffs://spiffs/user/audio/success.wav";
+const IDENTIFY_TEXT: &str = "WAS Locate Active!";
+const NOTIFICATION_TASK_CORE: i32 = 0;
+const NOTIFICATION_TASK_PRIORITY: u32 = 4;
+const NOTIFICATION_TASK_STACK_SIZE: u32 = 4_096;
+const NOTIFICATION_DEFAULT_VOLUME: i32 = 90;
+const NOTIFICATION_PLAYBACK_DELAY_MS: u32 = 1_000;
 const STOP_TIMEOUT_MS: u64 = 5_000;
+const TASK_CREATED: i32 = 1;
 const USER_AGENT: &str = concat!("Willow/", env!("WILLOW_VERSION"));
 
 static CLIENT: AtomicPtr<esp_websocket_client> = AtomicPtr::new(core::ptr::null_mut());
 
-struct NotificationMutex(SemaphoreHandle_t);
+struct NotificationJob {
+    audio_url: Option<String>,
+    backlight: bool,
+    backlight_max: bool,
+    cancel: Arc<AtomicBool>,
+    id: u64,
+    repeat: i32,
+    strobe_period_ms: i32,
+    text: Option<String>,
+    volume: i32,
+}
 
-// The FreeRTOS mutex is designed to be shared by tasks. It lives for the
-// firmware lifetime, so its handle remains valid after publication here.
-unsafe impl Send for NotificationMutex {}
-unsafe impl Sync for NotificationMutex {}
+struct NotificationTask {
+    job: NotificationJob,
+    lease: NotificationLease,
+}
 
-static NOTIFICATION_MUTEX: OnceLock<NotificationMutex> = OnceLock::new();
+static NOTIFICATION_RUN: Mutex<()> = Mutex::new(());
+static NOTIFICATION_STATE: NotificationState = NotificationState::new();
 
 unsafe extern "C" {
     fn willow_was_event_handler(
@@ -57,18 +78,6 @@ unsafe extern "C" {
         event_id: i32,
         event_data: *mut c_void,
     );
-}
-
-fn notification_mutex() -> Result<SemaphoreHandle_t, EspError> {
-    let mutex = NOTIFICATION_MUTEX.get_or_init(|| {
-        NotificationMutex(unsafe { xQueueCreateMutex(WILLOW_QUEUE_TYPE_MUTEX as u8) })
-    });
-
-    if mutex.0.is_null() {
-        Err(EspError::from_infallible::<ESP_ERR_NO_MEM>())
-    } else {
-        Ok(mutex.0)
-    }
 }
 
 pub(crate) fn client_handle() -> esp_websocket_client_handle_t {
@@ -185,23 +194,218 @@ fn handle_command_result(result: &CommandResult) {
     }
 }
 
-fn handle_control_message(message: &str) -> bool {
+fn send_notification_done(id: u64) {
+    if id == 1 || !is_connected(true) {
+        return;
+    }
+
+    let message = match serde_json::to_string(&Event::NotifyDone(id)) {
+        Ok(message) => message,
+        Err(error) => {
+            error!(target: LOG_TARGET, "failed to serialize notify_done: {error:#?}");
+            return;
+        }
+    };
+    if let Err(error) = send_text(&message) {
+        error!(target: LOG_TARGET, "failed to send WAS notify_done message: {error:#?}");
+    }
+}
+
+fn run_notification(job: &NotificationJob) {
+    info!(
+        target: LOG_TARGET,
+        "started notify task for notification with ID='{}'",
+        job.id
+    );
+    ui::show_notification(job.text.as_deref());
+    if let Err(error) = backlight::reset_display_timer(true) {
+        error!(target: LOG_TARGET, "failed to pause display timer: {error:#?}");
+    }
+    backlight::set(job.backlight, job.backlight_max);
+
+    let strobe_started = if job.strobe_period_ms > 0 {
+        match u32::try_from(job.strobe_period_ms)
+            .map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())
+            .and_then(backlight::start_strobe)
+        {
+            Ok(()) => true,
+            Err(error) => {
+                error!(target: LOG_TARGET, "failed to start display backlight strobe: {error:#?}");
+                false
+            }
+        }
+    } else {
+        false
+    };
+
+    if let Some(url) = job.audio_url.as_deref() {
+        if let Err(source) = audio::set_volume(Some(job.volume)) {
+            error!(target: LOG_TARGET, "failed to set notification volume: {source:#?}");
+        }
+
+        for _ in 0..job.repeat {
+            if job.cancel.load(Ordering::Acquire) || ui::notification_cancelled() {
+                break;
+            }
+            if let Err(source) = audio::play_sync(url) {
+                error!(target: LOG_TARGET, "failed to play notification audio: {source:#?}");
+            }
+            FreeRtos::delay_ms(NOTIFICATION_PLAYBACK_DELAY_MS);
+        }
+
+        if let Err(source) = audio::set_volume(None) {
+            error!(target: LOG_TARGET, "failed to restore configured volume: {source:#?}");
+        }
+    }
+
+    ui::notification_end();
+    if let Err(error) = backlight::reset_display_timer(false) {
+        error!(target: LOG_TARGET, "failed to reset display timer: {error:#?}");
+    }
+    if strobe_started {
+        backlight::stop_strobe();
+    }
+}
+
+unsafe extern "C" fn notification_task(data: *mut c_void) {
+    // SAFETY: `start_notification` transfers exactly one boxed task to a
+    // successfully created FreeRTOS task and recovers it on creation failure.
+    let task = unsafe { Box::from_raw(data.cast::<NotificationTask>()) };
+    let run = match NOTIFICATION_RUN.lock() {
+        Ok(run) => run,
+        Err(poisoned) => poisoned.into_inner(),
+    };
+
+    if !task.job.cancel.load(Ordering::Acquire) {
+        run_notification(&task.job);
+    }
+
+    send_notification_done(task.job.id);
+    NOTIFICATION_STATE.clear(task.lease);
+    drop(task);
+    // `vTaskDelete` does not unwind this Rust stack, so release the execution
+    // mutex explicitly before deleting the current task.
+    drop(run);
+    unsafe { vTaskDelete(core::ptr::null_mut()) };
+}
+
+fn start_notification(job: NotificationJob) -> Result<(), EspError> {
+    let activation = NOTIFICATION_STATE.activate(job.id, Arc::clone(&job.cancel));
+    if activation.replaced {
+        if let Err(source) = audio::cancel_playback() {
+            error!(target: LOG_TARGET, "failed to cancel replaced notification playback: {source:?}");
+        }
+    }
+
+    let task = Box::into_raw(Box::new(NotificationTask {
+        job,
+        lease: activation.lease,
+    }));
+    let status = unsafe {
+        xTaskCreatePinnedToCore(
+            Some(notification_task),
+            c"notify_task".as_ptr(),
+            NOTIFICATION_TASK_STACK_SIZE,
+            task.cast(),
+            NOTIFICATION_TASK_PRIORITY,
+            core::ptr::null_mut(),
+            NOTIFICATION_TASK_CORE,
+        )
+    };
+    if status == TASK_CREATED {
+        Ok(())
+    } else {
+        unsafe { drop(Box::from_raw(task)) };
+        NOTIFICATION_STATE.clear(activation.lease);
+        Err(EspError::from_infallible::<ESP_FAIL>())
+    }
+}
+
+fn cancel_notification(id: u64) -> bool {
+    match NOTIFICATION_STATE.cancel(id) {
+        CancelOutcome::NoActiveNotification => {
+            warn!(target: LOG_TARGET, "trying to cancel notify_task but no notification is active");
+            true
+        }
+        CancelOutcome::DifferentId => false,
+        CancelOutcome::Cancelled => {
+            info!(target: LOG_TARGET, "cancel active notify_task with ID='{id}'");
+            if let Err(source) = audio::cancel_playback() {
+                error!(target: LOG_TARGET, "failed to cancel notification playback: {source:#?}");
+            }
+            true
+        }
+    }
+}
+
+fn handle_notification(notification: Option<Notification>) {
+    let Some(notification) = notification else {
+        return;
+    };
+    let Some(id) = notification.id else {
+        warn!(target: LOG_TARGET, "ignoring notification without ID");
+        return;
+    };
+
+    if notification.cancel == Some(true) && cancel_notification(id) {
+        return;
+    }
+
+    if let Some(url) = notification.audio_url.as_deref() {
+        info!(target: LOG_TARGET, "audio URL in notify command: {url}");
+    }
+    if let Some(text) = notification.text.as_deref() {
+        info!(target: LOG_TARGET, "text in notify command: {text}");
+    }
+
+    let job = NotificationJob {
+        audio_url: notification.audio_url,
+        backlight: notification.backlight.unwrap_or(true),
+        backlight_max: notification.backlight_max.unwrap_or(true),
+        cancel: Arc::new(AtomicBool::new(false)),
+        id,
+        repeat: notification.repeat.unwrap_or(1),
+        strobe_period_ms: notification.strobe_period_ms.unwrap_or(0),
+        text: notification.text,
+        volume: notification.volume.unwrap_or(NOTIFICATION_DEFAULT_VOLUME),
+    };
+    if let Err(error) = start_notification(job) {
+        error!(target: LOG_TARGET, "failed to start notification task: {error:#?}");
+    }
+}
+
+fn start_identify() {
+    let job = NotificationJob {
+        audio_url: Some(IDENTIFY_AUDIO_URL.to_owned()),
+        backlight: true,
+        backlight_max: true,
+        cancel: Arc::new(AtomicBool::new(false)),
+        id: 1,
+        repeat: 5,
+        strobe_period_ms: 0,
+        text: Some(IDENTIFY_TEXT.to_owned()),
+        volume: NOTIFICATION_DEFAULT_VOLUME,
+    };
+    if let Err(error) = start_notification(job) {
+        error!(target: LOG_TARGET, "failed to start identify task: {error:#?}");
+    }
+}
+
+fn handle_message(message: &str) {
     let Ok(message) = serde_json::from_str::<InboundMessage>(message) else {
-        return false;
+        return;
     };
 
     if let Some(result) = message.wake_result.as_ref() {
         handle_wake_result(result);
-        true
     } else if let Some(result) = message.result.as_ref() {
         handle_command_result(result);
-        true
     } else if let Some(document) = message.config {
         let document = match serde_json::to_vec_pretty(&document) {
             Ok(document) => document,
             Err(error) => {
                 error!(target: LOG_TARGET, "failed to serialize configuration: {error:#?}");
-                return true;
+                return;
             }
         };
         info!(
@@ -216,12 +420,12 @@ fn handle_control_message(message: &str) -> bool {
             Ok(document) => document,
             Err(error) => {
                 error!(target: LOG_TARGET, "failed to serialize NVS document: {error:#?}");
-                return true;
+                return;
             }
         };
         if let Err(error) = nvs::apply_document(&document) {
             error!(target: LOG_TARGET, "failed to apply NVS document: {error:#?}");
-            return true;
+            return;
         }
 
         info!(target: LOG_TARGET, "restarting to apply NVS changes");
@@ -242,7 +446,6 @@ fn handle_control_message(message: &str) -> bool {
                         error!(target: LOG_TARGET, "failed to start OTA task: {error:#?}");
                     }
                 }
-                true
             }
             Some(InboundCommand::Restart) => {
                 info!(target: LOG_TARGET, "found command in WebSocket message: restart");
@@ -252,10 +455,20 @@ fn handle_control_message(message: &str) -> bool {
                 deinitialize();
                 system::restart_delayed()
             }
-            Some(
-                InboundCommand::Identify | InboundCommand::Notify | InboundCommand::Unknown(_),
-            )
-            | None => false,
+            Some(InboundCommand::Notify) => {
+                info!(target: LOG_TARGET, "found command in WebSocket message: notify");
+                info!(target: LOG_TARGET, "received notify command");
+                handle_notification(message.notification);
+            }
+            Some(InboundCommand::Identify) => {
+                info!(target: LOG_TARGET, "found command in WebSocket message: identify");
+                info!(target: LOG_TARGET, "received identify command");
+                start_identify();
+            }
+            Some(InboundCommand::Unknown(command)) => {
+                info!(target: LOG_TARGET, "found command in WebSocket message: {command}");
+            }
+            None => {}
         }
     }
 }
@@ -411,10 +624,6 @@ pub(crate) fn initialize(url: &str) -> Result<(), EspError> {
         return Ok(());
     }
 
-    // Preserve the advisory allocation failure. The retained C notification
-    // paths will receive the same null handle that they did previously.
-    let _ = notification_mutex();
-
     let url = CString::new(url).map_err(|_| EspError::from_infallible::<ESP_ERR_INVALID_ARG>())?;
     let user_agent = CString::new(USER_AGENT).unwrap();
 
@@ -482,41 +691,22 @@ pub unsafe extern "C" fn rust_was_init(url: *const c_char) -> esp_err_t {
     initialize(url).map_or_else(|error| error.code(), |()| ESP_OK)
 }
 
-/// Returns the current raw client handle to the retained C transport users.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_was_client_handle() -> esp_websocket_client_handle_t {
-    client_handle()
-}
-
-/// Reports connection state to retained C WAS message handlers.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_was_is_connected(wait: bool) -> bool {
-    is_connected(wait)
-}
-
-/// Handles migrated messages before the retained C notification parser.
+/// Handles a complete text message for the retained C event callback.
 ///
 /// # Safety
 ///
 /// `message` must either be null or point to a valid NUL-terminated string for
 /// the duration of this call.
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn rust_was_handle_control(message: *const c_char) -> bool {
+pub unsafe extern "C" fn rust_was_handle_message(message: *const c_char) {
     if message.is_null() {
-        return false;
+        return;
     }
 
     let Ok(message) = (unsafe { CStr::from_ptr(message) }).to_str() else {
-        return false;
+        return;
     };
-    handle_control_message(message)
-}
-
-/// Returns the firmware-lifetime mutex borrowed by the retained C notification
-/// tasks.
-#[unsafe(no_mangle)]
-pub extern "C" fn rust_was_notify_mutex() -> SemaphoreHandle_t {
-    notification_mutex().unwrap_or(core::ptr::null_mut())
+    handle_message(message);
 }
 
 /// Requests configuration after the retained C event handler connects.

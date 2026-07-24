@@ -17,6 +17,7 @@ pub(super) enum Command<T> {
 pub(super) enum Event {
     Goodbye(DeviceIdentity),
     Hello(DeviceIdentity),
+    NotifyDone(u64),
     WakeEnd {},
     WakeStart { wake_volume: f32 },
 }
@@ -40,10 +41,7 @@ impl DeviceIdentity {
     }
 }
 
-// The retained C callback remains active for this modeling commit. The next
-// handler commits consume these types and remove the temporary allowances.
 /// One message received from the Willow Application Server.
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, PartialEq)]
 pub(super) struct InboundMessage {
     #[serde(default, deserialize_with = "optional_object")]
@@ -63,7 +61,6 @@ pub(super) struct InboundMessage {
 }
 
 /// Result of Willow One Wake arbitration.
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, PartialEq)]
 pub(super) struct WakeResult {
     #[serde(default, deserialize_with = "optional_bool")]
@@ -71,7 +68,6 @@ pub(super) struct WakeResult {
 }
 
 /// Result of a command handled by the application server.
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, PartialEq)]
 pub(super) struct CommandResult {
     #[serde(default, deserialize_with = "optional_bool")]
@@ -81,7 +77,6 @@ pub(super) struct CommandResult {
 }
 
 /// Commands sent by the application server.
-#[allow(dead_code)]
 #[derive(Debug, PartialEq)]
 pub(super) enum InboundCommand {
     Notify,
@@ -92,7 +87,6 @@ pub(super) enum InboundCommand {
 }
 
 /// Parameters for a notification command.
-#[allow(dead_code)]
 #[derive(Debug, Deserialize, PartialEq)]
 pub(super) struct Notification {
     #[serde(default, deserialize_with = "optional_u64")]
@@ -195,6 +189,14 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn serializes_notification_completion() {
+        let event = serde_json::to_string(&super::Event::NotifyDone(42))
+            .expect("serializable notification completion");
+
+        assert_eq!(event, r#"{"notify_done":42}"#);
+    }
+
     #[test]
     fn models_each_top_level_message_shape_together() {
         let message: super::InboundMessage = serde_json::from_str(
