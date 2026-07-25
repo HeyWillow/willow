@@ -47,12 +47,10 @@ jobs:
               - 'Dockerfile'
               - 'container.gitconfig'
             image:
-              - 'CMakeLists.txt'
-              - 'main/**'
-              - 'partitions_willow.csv'
-              - 'sdkconfig.defaults'
-              - 'spiffs/**'
-              - 'utils.sh'
+              - '**'
+              - '!**/*.md'
+              - '!ha/**'
+              - '!misc/**'
       - name: extract metadata
         id: metadata
         uses: docker/metadata-action@v5
