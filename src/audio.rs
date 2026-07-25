@@ -93,7 +93,7 @@ impl AudioStartError {
     }
 
     fn stage(stage: &str, source: &impl fmt::Debug) -> Self {
-        Self::message(format!("{stage}: {source:#?}"))
+        Self::message(format!("{stage}: {source:?}"))
     }
 }
 
@@ -114,7 +114,7 @@ pub(crate) enum AudioError {
 impl AudioError {
     fn command(operation: &str, source: &impl fmt::Debug) -> Self {
         Self::Command {
-            detail: format!("{operation}: {source:#?}"),
+            detail: format!("{operation}: {source:?}"),
         }
     }
 }
@@ -181,7 +181,7 @@ pub(crate) fn initialize() -> Result<(), AudioStartError> {
     let coordinator = RecorderCoordinator::start(capture, upload, Arc::clone(&player), move || {
         let result = lock(&reset_microphone).reinitialize(mic_gain);
         if let Err(source) = result {
-            error!(target: LOG_TARGET, "failed to reinitialize microphone after unmute: {source:#?}");
+            error!(target: LOG_TARGET, "failed to reinitialize microphone after unmute: {source:?}");
         } else {
             info!(target: LOG_TARGET, "reinitialized microphone after unmute");
         }
@@ -248,7 +248,7 @@ pub(crate) fn play_response(ok: bool, text: Option<&str>) -> Result<(), AudioErr
                 .map_err(|source| AudioError::command("failed to queue response audio", &source))
         }
         Err(source) => {
-            error!(target: LOG_TARGET, "failed to select command response audio: {source:#?}");
+            error!(target: LOG_TARGET, "failed to select command response audio: {source:?}");
             Ok(())
         }
     }

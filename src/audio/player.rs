@@ -351,8 +351,8 @@ fn run_worker(
     let mut runtime = match PlayerRuntime::new(transmit, playback, volume) {
         Ok(runtime) => runtime,
         Err(source) => {
-            error!(target: LOG_TARGET, "failed to initialize audio player: {source:#?}");
-            let _ = startup.send(Err(format!("{source:#?}")));
+            error!(target: LOG_TARGET, "failed to initialize audio player: {source:?}");
+            let _ = startup.send(Err(format!("{source:?}")));
             return;
         }
     };
@@ -366,7 +366,7 @@ fn run_worker(
             PlayerCommand::SetVolume { volume, completion } => {
                 let result = runtime
                     .set_volume(volume)
-                    .map_err(|source| format!("{source:#?}"));
+                    .map_err(|source| format!("{source:?}"));
                 let _ = completion.send(result);
             }
             PlayerCommand::Shutdown => break,
@@ -394,10 +394,10 @@ fn run_command(runtime: &mut PlayerRuntime, command: PlayCommand) {
         Err(source) => {
             error!(
                 target: LOG_TARGET,
-                "failed playback of {:?}: {source:#?}",
+                "failed playback of {:?}: {source:?}",
                 command.uri
             );
-            PlaybackOutcome::Failed(format!("{source:#?}"))
+            PlaybackOutcome::Failed(format!("{source:?}"))
         }
     };
 

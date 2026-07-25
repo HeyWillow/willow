@@ -231,7 +231,7 @@ unsafe extern "C" fn install_task(data: *mut c_void) {
     let installed = match install(&url) {
         Ok(()) => true,
         Err(error) => {
-            error!(target: LOG_TARGET, "OTA failed: {error:#?}");
+            error!(target: LOG_TARGET, "OTA failed: {error:?}");
             false
         }
     };
@@ -257,7 +257,7 @@ pub(crate) fn start(url: &str) -> Result<(), EspError> {
         .map_err(|_| EspError::from_infallible::<ESP_FAIL>())?;
 
     if let Err(error) = crate::backlight::reset_display_timer(true) {
-        error!(target: LOG_TARGET, "failed to pause display timer: {error:#?}");
+        error!(target: LOG_TARGET, "failed to pause display timer: {error:?}");
     }
     crate::ui::show_center_message("Starting Upgrade");
     crate::backlight::set(true, false);

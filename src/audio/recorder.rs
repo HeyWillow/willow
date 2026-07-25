@@ -270,8 +270,8 @@ fn run_worker(
     let mut runtime = match CaptureRuntime::new(receive, record_buffer, afe_input) {
         Ok(runtime) => runtime,
         Err(source) => {
-            error!(target: LOG_TARGET, "failed to initialize recorder capture: {source:#?}");
-            let _ = startup.send(Err(format!("{source:#?}")));
+            error!(target: LOG_TARGET, "failed to initialize recorder capture: {source:?}");
+            let _ = startup.send(Err(format!("{source:?}")));
             return;
         }
     };
@@ -282,7 +282,7 @@ fn run_worker(
     while !shutdown.load(Ordering::Acquire) {
         if let Err(source) = runtime.capture_cycle(events, shutdown) {
             if !shutdown.load(Ordering::Acquire) {
-                error!(target: LOG_TARGET, "recorder capture stopped: {source:#?}");
+                error!(target: LOG_TARGET, "recorder capture stopped: {source:?}");
             }
             return;
         }

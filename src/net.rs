@@ -168,7 +168,7 @@ fn set_hostname(
     )) {
         Ok(hostname) => hostname,
         Err(error) => {
-            error!(target: LOG_TARGET, "failed to format hostname: {error:#?}");
+            error!(target: LOG_TARGET, "failed to format hostname: {error:?}");
             return None;
         }
     };

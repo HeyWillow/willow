@@ -310,8 +310,8 @@ fn run_worker(
     let mut scratch = match allocate_scratch() {
         Ok(scratch) => scratch,
         Err(source) => {
-            error!(target: LOG_TARGET, "failed to initialize WIS upload worker: {source:#?}");
-            let _ = startup.send(Err(format!("{source:#?}")));
+            error!(target: LOG_TARGET, "failed to initialize WIS upload worker: {source:?}");
+            let _ = startup.send(Err(format!("{source:?}")));
             return;
         }
     };
@@ -325,13 +325,13 @@ fn run_worker(
         let (result, dropped_samples) = match result {
             Ok(completed) => (Ok(completed.response), completed.dropped_samples),
             Err(source) => {
-                error!(target: LOG_TARGET, "WIS upload failed: {source:#?}");
+                error!(target: LOG_TARGET, "WIS upload failed: {source:?}");
                 let dropped_samples = match record_buffer.abort_session(session) {
                     Ok(dropped_samples) => dropped_samples,
                     Err(abort_error) => {
                         warn!(
                             target: LOG_TARGET,
-                            "failed to abort WIS record-buffer session {session:?}: {abort_error:#?}"
+                            "failed to abort WIS record-buffer session {session:?}: {abort_error:?}"
                         );
                         0
                     }
@@ -404,7 +404,7 @@ fn abort_failed_begin(record_buffer: &RecordBuffer, session: RecordSessionId) {
     if let Err(source) = record_buffer.abort_session(session) {
         error!(
             target: LOG_TARGET,
-            "failed to roll back WIS session {session:?} after command rejection: {source:#?}"
+            "failed to roll back WIS session {session:?} after command rejection: {source:?}"
         );
     }
 }

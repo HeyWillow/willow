@@ -33,7 +33,7 @@ fn take_system_event_loop() -> EspSystemEventLoop {
         Err(error) => {
             log::error!(
                 target: "WILLOW/MAIN",
-                "failed to initialize default event loop: {error:#?}"
+                "failed to initialize default event loop: {error:?}"
             );
             unsafe { esp_idf_sys::esp_system_abort(c"Event-loop initialization failed".as_ptr()) }
         }
@@ -58,7 +58,7 @@ fn main() {
     log::info!(target: "WILLOW/RUST", "entered Rust main()");
 
     if let Err(error) = logging::apply_policy(log_filter) {
-        log::error!(target: "WILLOW/MAIN", "failed to configure logging: {error:#?}");
+        log::error!(target: "WILLOW/MAIN", "failed to configure logging: {error:?}");
         unsafe { esp_idf_sys::esp_system_abort(c"Logging initialization failed".as_ptr()) }
     }
     log::info!(target: "WILLOW/MAIN", "Starting up! Please wait...");
@@ -98,7 +98,7 @@ fn main() {
         log::error!(target: "WILLOW/MAIN", "failed to initialize mute input: {error}");
     }
     if let Err(error) = net::initialize() {
-        log::error!(target: "WILLOW/MAIN", "failed to initialize network: {error:#?}");
+        log::error!(target: "WILLOW/MAIN", "failed to initialize network: {error:?}");
         unsafe { esp_idf_sys::esp_system_abort(c"Network initialization failed".as_ptr()) }
     }
 
@@ -107,7 +107,7 @@ fn main() {
         Err(error) => {
             log::error!(
                 target: "WILLOW/MAIN",
-                "failed to read WAS NVS configuration: {error:#?}"
+                "failed to read WAS NVS configuration: {error:?}"
             );
             ui::show_error("Fatal error!", Some("Failed to read NVS partition."));
             loop {
@@ -118,7 +118,7 @@ fn main() {
     if let Err(error) = was::initialize(was_config.url.as_str()) {
         log::error!(
             target: "WILLOW/MAIN",
-            "failed to initialize Willow Application Server connection: {error:#?}"
+            "failed to initialize Willow Application Server connection: {error:?}"
         );
         ui::show_error("Fatal error!", Some("WAS initialization failed."));
     }
@@ -127,7 +127,7 @@ fn main() {
         unsafe { esp_idf_sys::vTaskDelay(u32::MAX) }
     }
     if let Err(error) = audio::initialize() {
-        log::error!(target: "WILLOW/MAIN", "failed to initialize audio: {error:#?}");
+        log::error!(target: "WILLOW/MAIN", "failed to initialize audio: {error}");
         ui::show_error("Recorder init failed", Some("Check logs"));
     }
     if let Err(error) = backlight::initialize_display_timer() {

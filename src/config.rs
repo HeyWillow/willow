@@ -92,7 +92,7 @@ pub(crate) fn replace(data: &[u8]) -> ! {
     let updated = match write(data) {
         Ok(()) => true,
         Err(error) => {
-            error!(target: LOG_TARGET, "failed to write {CONFIG_PATH}: {error:#?}");
+            error!(target: LOG_TARGET, "failed to write {CONFIG_PATH}: {error:?}");
             false
         }
     };
@@ -101,7 +101,7 @@ pub(crate) fn replace(data: &[u8]) -> ! {
         info!(target: LOG_TARGET, "{CONFIG_PATH} updated, restarting");
         crate::ui::show_center_message("Configuration Updated");
         if let Err(error) = crate::backlight::reset_display_timer(true) {
-            error!(target: LOG_TARGET, "failed to pause display timer: {error:#?}");
+            error!(target: LOG_TARGET, "failed to pause display timer: {error:?}");
         }
         crate::backlight::set(true, false);
     }

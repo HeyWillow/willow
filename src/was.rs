@@ -217,7 +217,7 @@ fn handle_wake_result(result: &WakeResult) {
         info!(target: LOG_TARGET, "lost wake race, stopping pipelines");
     }
     if let Err(source) = audio::multiwake_result(won) {
-        error!(target: LOG_TARGET, "failed to apply multiwake result: {source:#?}");
+        error!(target: LOG_TARGET, "failed to apply multiwake result: {source:?}");
     }
 }
 
@@ -229,7 +229,7 @@ fn handle_command_result(result: &CommandResult) {
     let speech = result.speech.as_deref().filter(|speech| !speech.is_empty());
     let audio_text = speech.unwrap_or(if ok { "Success" } else { "Error" });
     if let Err(source) = audio::play_response(ok, Some(audio_text)) {
-        error!(target: LOG_TARGET, "failed to play command response: {source:#?}");
+        error!(target: LOG_TARGET, "failed to play command response: {source:?}");
     }
 
     if let Some(speech) = speech {
@@ -239,7 +239,7 @@ fn handle_command_result(result: &CommandResult) {
     }
 
     if let Err(error) = backlight::reset_display_timer(false) {
-        error!(target: LOG_TARGET, "failed to reset display timer: {error:#?}");
+        error!(target: LOG_TARGET, "failed to reset display timer: {error:?}");
     }
 }
 
@@ -251,12 +251,12 @@ fn send_notification_done(id: u64) {
     let message = match serde_json::to_string(&Event::NotifyDone(id)) {
         Ok(message) => message,
         Err(error) => {
-            error!(target: LOG_TARGET, "failed to serialize notify_done: {error:#?}");
+            error!(target: LOG_TARGET, "failed to serialize notify_done: {error:?}");
             return;
         }
     };
     if let Err(error) = send_text(&message) {
-        error!(target: LOG_TARGET, "failed to send WAS notify_done message: {error:#?}");
+        error!(target: LOG_TARGET, "failed to send WAS notify_done message: {error:?}");
     }
 }
 
@@ -268,7 +268,7 @@ fn run_notification(job: &NotificationJob) {
     );
     ui::show_notification(job.text.as_deref());
     if let Err(error) = backlight::reset_display_timer(true) {
-        error!(target: LOG_TARGET, "failed to pause display timer: {error:#?}");
+        error!(target: LOG_TARGET, "failed to pause display timer: {error:?}");
     }
     backlight::set(job.backlight, job.backlight_max);
 
@@ -279,7 +279,7 @@ fn run_notification(job: &NotificationJob) {
         {
             Ok(()) => true,
             Err(error) => {
-                error!(target: LOG_TARGET, "failed to start display backlight strobe: {error:#?}");
+                error!(target: LOG_TARGET, "failed to start display backlight strobe: {error:?}");
                 false
             }
         }
@@ -289,7 +289,7 @@ fn run_notification(job: &NotificationJob) {
 
     if let Some(url) = job.audio_url.as_deref() {
         if let Err(source) = audio::set_volume(Some(job.volume)) {
-            error!(target: LOG_TARGET, "failed to set notification volume: {source:#?}");
+            error!(target: LOG_TARGET, "failed to set notification volume: {source:?}");
         }
 
         for _ in 0..job.repeat {
@@ -297,19 +297,19 @@ fn run_notification(job: &NotificationJob) {
                 break;
             }
             if let Err(source) = audio::play_sync(url) {
-                error!(target: LOG_TARGET, "failed to play notification audio: {source:#?}");
+                error!(target: LOG_TARGET, "failed to play notification audio: {source:?}");
             }
             FreeRtos::delay_ms(NOTIFICATION_PLAYBACK_DELAY_MS);
         }
 
         if let Err(source) = audio::set_volume(None) {
-            error!(target: LOG_TARGET, "failed to restore configured volume: {source:#?}");
+            error!(target: LOG_TARGET, "failed to restore configured volume: {source:?}");
         }
     }
 
     ui::notification_end();
     if let Err(error) = backlight::reset_display_timer(false) {
-        error!(target: LOG_TARGET, "failed to reset display timer: {error:#?}");
+        error!(target: LOG_TARGET, "failed to reset display timer: {error:?}");
     }
     if strobe_started {
         backlight::stop_strobe();
@@ -380,7 +380,7 @@ fn cancel_notification(id: u64) -> bool {
         CancelOutcome::Cancelled => {
             info!(target: LOG_TARGET, "cancel active notify_task with ID='{id}'");
             if let Err(source) = audio::cancel_playback() {
-                error!(target: LOG_TARGET, "failed to cancel notification playback: {source:#?}");
+                error!(target: LOG_TARGET, "failed to cancel notification playback: {source:?}");
             }
             true
         }
@@ -419,7 +419,7 @@ fn handle_notification(notification: Option<Notification>) {
         volume: notification.volume.unwrap_or(NOTIFICATION_DEFAULT_VOLUME),
     };
     if let Err(error) = start_notification(job) {
-        error!(target: LOG_TARGET, "failed to start notification task: {error:#?}");
+        error!(target: LOG_TARGET, "failed to start notification task: {error:?}");
     }
 }
 
@@ -436,7 +436,7 @@ fn start_identify() {
         volume: NOTIFICATION_DEFAULT_VOLUME,
     };
     if let Err(error) = start_notification(job) {
-        error!(target: LOG_TARGET, "failed to start identify task: {error:#?}");
+        error!(target: LOG_TARGET, "failed to start identify task: {error:?}");
     }
 }
 
@@ -453,7 +453,7 @@ fn handle_message(message: &str) {
         let document = match serde_json::to_vec_pretty(&document) {
             Ok(document) => document,
             Err(error) => {
-                error!(target: LOG_TARGET, "failed to serialize configuration: {error:#?}");
+                error!(target: LOG_TARGET, "failed to serialize configuration: {error:?}");
                 return;
             }
         };
@@ -468,19 +468,19 @@ fn handle_message(message: &str) {
         let document = match serde_json::to_vec(&document) {
             Ok(document) => document,
             Err(error) => {
-                error!(target: LOG_TARGET, "failed to serialize NVS document: {error:#?}");
+                error!(target: LOG_TARGET, "failed to serialize NVS document: {error:?}");
                 return;
             }
         };
         if let Err(error) = nvs::apply_document(&document) {
-            error!(target: LOG_TARGET, "failed to apply NVS document: {error:#?}");
+            error!(target: LOG_TARGET, "failed to apply NVS document: {error:?}");
             return;
         }
 
         info!(target: LOG_TARGET, "restarting to apply NVS changes");
         ui::show_center_message("Connectivity Updated");
         if let Err(error) = backlight::reset_display_timer(true) {
-            error!(target: LOG_TARGET, "failed to pause display timer: {error:#?}");
+            error!(target: LOG_TARGET, "failed to pause display timer: {error:?}");
         }
         backlight::set(true, false);
         deinitialize();
@@ -492,7 +492,7 @@ fn handle_message(message: &str) {
                 if let Some(url) = message.ota_url.as_deref() {
                     info!(target: LOG_TARGET, "OTA URL: {url}");
                     if let Err(error) = ota::start(url) {
-                        error!(target: LOG_TARGET, "failed to start OTA task: {error:#?}");
+                        error!(target: LOG_TARGET, "failed to start OTA task: {error:?}");
                     }
                 }
             }

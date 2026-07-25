@@ -97,7 +97,7 @@ fn wait_for_unmute(shutdown: &AtomicBool) -> bool {
         let muted = match is_muted() {
             Ok(muted) => muted,
             Err(source) => {
-                error!(target: LOG_TARGET, "cannot read mute input: {source:#?}");
+                error!(target: LOG_TARGET, "cannot read mute input: {source:?}");
                 return false;
             }
         };

@@ -50,12 +50,12 @@ pub(super) fn wait_for_initial_unmute() {
             ui::show_error("Mute Activated", Some("Unmute to continue"));
         }
         Err(source) => {
-            error!(target: LOG_TARGET, "cannot read startup mute input; continuing audio startup: {source:#?}");
+            error!(target: LOG_TARGET, "cannot read startup mute input; continuing audio startup: {source:?}");
             return;
         }
     }
     if let Err(source) = input::wait_until_unmuted() {
-        error!(target: LOG_TARGET, "cannot wait for startup mute release; continuing audio startup: {source:#?}");
+        error!(target: LOG_TARGET, "cannot wait for startup mute release; continuing audio startup: {source:?}");
     }
 }
 
@@ -133,7 +133,7 @@ impl RecorderCoordinator {
         let unmute_monitor = match unmute_monitor {
             Ok(monitor) => Some(monitor),
             Err(source) => {
-                error!(target: LOG_TARGET, "failed to start mute input monitor: {source:#?}");
+                error!(target: LOG_TARGET, "failed to start mute input monitor: {source:?}");
                 None
             }
         };
@@ -276,11 +276,11 @@ where
     fn run(mut self, commands: &Receiver<CoordinatorCommand>) {
         loop {
             if let Err(source) = self.drain_capture() {
-                error!(target: LOG_TARGET, "recorder capture event stream stopped: {source:#?}");
+                error!(target: LOG_TARGET, "recorder capture event stream stopped: {source:?}");
                 break;
             }
             if let Err(source) = self.drain_upload() {
-                error!(target: LOG_TARGET, "WIS completion stream stopped: {source:#?}");
+                error!(target: LOG_TARGET, "WIS completion stream stopped: {source:?}");
                 break;
             }
 
@@ -400,7 +400,7 @@ where
             WasEffect::WakeStart { volume_db } => was::send_wake_start(volume_db),
         };
         if let Err(source) = result {
-            error!(target: LOG_TARGET, "failed to publish recorder event to WAS: {source:#?}");
+            error!(target: LOG_TARGET, "failed to publish recorder event to WAS: {source:?}");
         }
     }
 
@@ -409,7 +409,7 @@ where
             DisplayEffect::None => {}
             DisplayEffect::Listening => {
                 if let Err(source) = backlight::reset_display_timer(true) {
-                    error!(target: LOG_TARGET, "failed to pause display timeout: {source:#?}");
+                    error!(target: LOG_TARGET, "failed to pause display timeout: {source:?}");
                 }
                 ui::show_listening();
                 backlight::set(true, false);
@@ -417,7 +417,7 @@ where
             DisplayEffect::Thinking { multiwake_won } => {
                 ui::show_thinking(multiwake_won);
                 if let Err(source) = backlight::reset_display_timer(false) {
-                    error!(target: LOG_TARGET, "failed to schedule display timeout: {source:#?}");
+                    error!(target: LOG_TARGET, "failed to schedule display timeout: {source:?}");
                 }
             }
         }
@@ -439,7 +439,7 @@ where
                     false
                 }
                 Err(source) => {
-                    error!(target: LOG_TARGET, "failed to start WIS upload: {source:#?}");
+                    error!(target: LOG_TARGET, "failed to start WIS upload: {source:?}");
                     true
                 }
             },
@@ -451,7 +451,7 @@ where
                 if let Err(source) = session.finish() {
                     error!(
                         target: LOG_TARGET,
-                        "failed to finish WIS session {:?} after {cause:?}: {source:#?}",
+                        "failed to finish WIS session {:?} after {cause:?}: {source:?}",
                         session.id()
                     );
                     true
@@ -545,7 +545,7 @@ where
             }
         };
         if let Err(source) = was::send_endpoint(&response) {
-            error!(target: LOG_TARGET, "failed to send WIS response to WAS: {source:#?}");
+            error!(target: LOG_TARGET, "failed to send WIS response to WAS: {source:?}");
         }
 
         let speaker_status = response.speaker_status.as_deref().unwrap_or("I heard:");
@@ -593,12 +593,12 @@ where
                 if let Err(source) = self.player.play(&uri) {
                     error!(
                         target: LOG_TARGET,
-                        "failed to queue recorder response audio {uri:?}: {source:#?}"
+                        "failed to queue recorder response audio {uri:?}: {source:?}"
                     );
                 }
             }
             Err(source) => {
-                warn!(target: LOG_TARGET, "cannot select recorder response audio: {source:#?}");
+                warn!(target: LOG_TARGET, "cannot select recorder response audio: {source:?}");
             }
         }
     }
@@ -616,7 +616,7 @@ where
         {
             warn!(
                 target: LOG_TARGET,
-                "failed to cancel WIS session {:?} during shutdown: {source:#?}",
+                "failed to cancel WIS session {:?} during shutdown: {source:?}",
                 session.id()
             );
         }

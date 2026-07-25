@@ -10,7 +10,7 @@ const LOG_TARGET: &str = "WILLOW/AUDIO";
 
 pub(super) fn prepare_playback() {
     if let Err(source) = crate::backlight::reset_display_timer(false) {
-        error!(target: LOG_TARGET, "failed to schedule display timeout for response audio: {source:#?}");
+        error!(target: LOG_TARGET, "failed to schedule display timeout for response audio: {source:?}");
     }
     crate::backlight::set(true, false);
 }

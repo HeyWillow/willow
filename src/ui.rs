@@ -928,7 +928,7 @@ fn cancel(state: &Arc<Mutex<UiState>>) {
         CancelAction::None => {}
         CancelAction::Recording => {
             if let Err(error) = crate::audio::stop_recording() {
-                error!(target: LOG_TARGET, "failed to stop recording: {error:#?}");
+                error!(target: LOG_TARGET, "failed to stop recording: {error:?}");
             }
         }
         CancelAction::Notification => {
@@ -937,7 +937,7 @@ fn cancel(state: &Arc<Mutex<UiState>>) {
                 .unwrap_or_else(PoisonError::into_inner)
                 .notification_cancelled = true;
             if let Err(error) = crate::audio::cancel_playback() {
-                error!(target: LOG_TARGET, "failed to stop notification audio: {error:#?}");
+                error!(target: LOG_TARGET, "failed to stop notification audio: {error:?}");
             }
         }
     }
