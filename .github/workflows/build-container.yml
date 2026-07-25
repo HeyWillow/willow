@@ -33,9 +33,14 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
       - name: build container
         uses: docker/build-push-action@v6
         with:
+          cache-from: type=gha,scope=willow-build-container
+          cache-to: type=gha,mode=max,scope=willow-build-container
           context: .
           file: ./Dockerfile
           push: true
