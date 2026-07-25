@@ -34,7 +34,7 @@ jobs:
 
       - uses: actions/checkout@v4
         with:
-          # fetch full history to be able to gather changed files in all new commits
+          # Compare pull requests with their base and pushes with their previous head.
           fetch-depth: 0
 
       - uses: tj-actions/changed-files@v45
@@ -53,8 +53,6 @@ jobs:
               - 'partitions_willow.csv'
               - 'sdkconfig.defaults'
               - 'spiffs/**'
-          since_last_remote_commit: true
-
       - name: extract metadata
         id: metadata
         uses: docker/metadata-action@v5
