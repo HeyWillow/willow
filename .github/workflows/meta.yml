@@ -30,7 +30,7 @@ jobs:
         run: |
           echo "ghcr_url=${GHCR_URL@L}" >> $GITHUB_OUTPUT
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Compare pull requests with their base and pushes with their previous head.
           fetch-depth: 0
@@ -54,7 +54,7 @@ jobs:
 
       - name: extract metadata
         id: metadata
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
           images: ${{ steps.lower.outputs.ghcr_url }}
           tags: |

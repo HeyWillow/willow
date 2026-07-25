@@ -7,7 +7,7 @@ jobs:
     name: clang-format
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: clang-format
         run: |
           git ls-files -z 'main/*.c' 'main/*.h' |
@@ -16,7 +16,7 @@ jobs:
     name: editorconfig-check
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: install editorconfig-checker
         uses: editorconfig-checker/action-editorconfig-checker@840e866d93b8e032123c23bac69dece044d4d84c # v2.2.0
         with:
