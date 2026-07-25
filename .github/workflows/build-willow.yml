@@ -98,7 +98,7 @@ jobs:
         run: find -type f -name '*.sha256sum.txt' -exec cat {} + | sort -u > sha256sums.txt
 
       - name: create release
-        uses: ncipollo/release-action@v1
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
         with:
           allowUpdates: false
           artifacts: "sha256sums.txt,willow-dist-*/willow-dist-*.bin,willow-ota-*/willow-ota-*.bin"
