@@ -19,8 +19,8 @@ jobs:
     runs-on: ubuntu-22.04
     outputs:
       base_container_image: ${{ steps.base_container.outputs.image }}
-      container_any_changed: ${{ steps.changed_files_yaml.outputs.container_any_changed }}
-      image_any_changed: ${{ steps.changed_files_yaml.outputs.image_any_changed }}
+      container_any_changed: ${{ steps.paths.outputs.container }}
+      image_any_changed: ${{ steps.paths.outputs.image }}
       metadata_json: ${{ steps.metadata.outputs.json }}
       metadata_labels: ${{ steps.metadata.outputs.labels }}
       metadata_tags: ${{ steps.metadata.outputs.tags }}
@@ -35,11 +35,13 @@ jobs:
           # Compare pull requests with their base and pushes with their previous head.
           fetch-depth: 0
 
-      - uses: tj-actions/changed-files@v45
+      - name: detect changed build inputs
+        uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706 # v4.0.2
         if: ${{ github.ref_type != 'tag' }}
-        id: changed_files_yaml
+        id: paths
         with:
-          files_yaml: |
+          base: ${{ github.ref_name }}
+          filters: |
             container:
               - '.github/workflows/build-container.yml'
               - 'Dockerfile'
@@ -62,7 +64,7 @@ jobs:
 
       - name: select base branch container
         id: base_container
-        if: ${{ steps.changed_files_yaml.outputs.container_any_changed == 'false' && steps.changed_files_yaml.outputs.image_any_changed == 'true' }}
+        if: ${{ steps.paths.outputs.container == 'false' && steps.paths.outputs.image == 'true' }}
         env:
           BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
           REGISTRY_IMAGE: ${{ steps.lower.outputs.ghcr_url }}
