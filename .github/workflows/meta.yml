@@ -19,9 +19,8 @@ jobs:
     name: trigger workflow based on changed files
     runs-on: ubuntu-22.04
     outputs:
-      check_container_image: ${{ steps.check_container_image.outputs.result }}
+      base_container_image: ${{ steps.base_container.outputs.image }}
       container_any_changed: ${{ steps.changed_files_yaml.outputs.container_any_changed }}
-      ghcr_url: ${{ steps.lower.outputs.ghcr_url }}
       image_any_changed: ${{ steps.changed_files_yaml.outputs.image_any_changed }}
       metadata_json: ${{ steps.metadata.outputs.json }}
       metadata_labels: ${{ steps.metadata.outputs.labels }}
@@ -51,6 +50,7 @@ jobs:
               - '!**/*.md'
               - '!ha/**'
               - '!misc/**'
+
       - name: extract metadata
         id: metadata
         uses: docker/metadata-action@v5
@@ -61,29 +61,19 @@ jobs:
             type=ref,event=pr
             type=ref,event=branch
 
-      - name: extract tag name
-        id: tag
-        run: |
-          tag=${{ fromJSON(steps.metadata.outputs.json).tags[0] }}
-          echo "tag=${tag##*:}" >> $GITHUB_OUTPUT
-
-      - name: debug
-        run: |
-          echo "${{ steps.metadata.outputs.json }}"
-          echo "${{ steps.tag.outputs.tag }}"
-
-      - uses: cloudposse/github-action-docker-image-exists@0.2.0
-        continue-on-error: true
-        id: check_container_image
+      - name: select base branch container
+        id: base_container
         if: ${{ steps.changed_files_yaml.outputs.container_any_changed == 'false' && steps.changed_files_yaml.outputs.image_any_changed == 'true' }}
-        with:
-          image_name: "${{ github.repository }}"
-          registry: ghcr.io
-          tag: "${{ steps.tag.outputs.tag }}"
-
-      - name: debug
+        env:
+          BASE_REF: ${{ github.event_name == 'pull_request' && github.base_ref || github.ref_name }}
+          REGISTRY_IMAGE: ${{ steps.lower.outputs.ghcr_url }}
         run: |
-          echo "${{ steps.check_container_image.outputs.result }}"
+          tag=$(printf '%s' "$BASE_REF" | sed 's/[^A-Za-z0-9_.-]/-/g')
+          image="$REGISTRY_IMAGE:$tag"
+          if ! docker manifest inspect "$image" >/dev/null 2>&1; then
+              image="$REGISTRY_IMAGE:main"
+          fi
+          echo "image=$image" >> "$GITHUB_OUTPUT"
 
   build_container:
     if: ${{ needs.trigger_workflow.outputs.container_any_changed == 'true' || github.ref_type == 'tag' }}
@@ -99,4 +89,4 @@ jobs:
     uses: ./.github/workflows/build-willow.yml
     needs: trigger_workflow
     with:
-      container-image: ${{ needs.trigger_workflow.outputs.check_container_image && fromJSON(needs.trigger_workflow.outputs.metadata_json).tags[0] || format('{0}:main', needs.trigger_workflow.outputs.ghcr_url) }}
+      container-image: ${{ needs.trigger_workflow.outputs.base_container_image }}
