@@ -1,9 +1,6 @@
 ---
 name: build-container
 
-env:
-  GH_TOKEN: ${{ github.token }}
-
 on:
   workflow_call:
     inputs:

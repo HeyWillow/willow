@@ -3,7 +3,6 @@ name: meta
 
 env:
   GHCR_URL: "ghcr.io/${{ github.repository }}"
-  GH_TOKEN: ${{ github.token }}
 
 on:
   pull_request:

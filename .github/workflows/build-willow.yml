@@ -1,10 +1,6 @@
 ---
 name: build-willow
 
-env:
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
-
 on:
   workflow_call:
     inputs:
@@ -41,23 +37,6 @@ jobs:
     steps:
       - name: checkout
         uses: actions/checkout@v4
-      - name: debug
-        run: echo ${{ inputs.container-tag }}
-      - name: ls -al
-        run: ls -al
-      - name: ls -al /
-        run: ls -al /
-      # fatal: detected dubious ownership in repository at '/willow'
-      - name: id
-        run: id
-      # ./utils.sh: line 193: idf.py: command not found
-      # - name: . $IDF_PATH/export.sh
-      #  run: . "$IDF_PATH/export.sh"
-      #  need to run it in the same step as utils.sh bloody hell
-      - name: env
-        run: env
-      - name: pwd
-        run: pwd
       - name: add /willow to git safe directories
         run: git config --global --add safe.directory /willow
       # need to run with bash to avoid this error:
@@ -114,12 +93,6 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           pattern: '!*.dockerbuild'
-
-      - name: pwd
-        run: pwd
-
-      - name: find -ls
-        run: find -ls
 
       - name: create sha256sums.txt
         run: find -type f -name '*.sha256sum.txt' -exec cat {} + | sort -u > sha256sums.txt
