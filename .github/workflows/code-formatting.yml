@@ -9,17 +9,17 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: clang-format
-        uses: jidicula/clang-format-action@v4.14.0
-        with:
-          clang-format-version: 15
-          check-path: 'main'
+        run: |
+          git ls-files -z 'main/*.c' 'main/*.h' |
+              xargs -0 --no-run-if-empty clang-format-15 --dry-run --Werror
   editorconfig-checker:
     name: editorconfig-check
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: editorconfig-check
-        uses: wow-rp-addons/actions-editorconfig-check@v1.0.2
+      - name: install editorconfig-checker
+        uses: editorconfig-checker/action-editorconfig-checker@840e866d93b8e032123c23bac69dece044d4d84c # v2.2.0
         with:
-          files: $(git log -1 --name-only --pretty='')
-
+          version: v3.8.0
+      - name: editorconfig-check
+        run: editorconfig-checker
