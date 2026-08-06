@@ -220,7 +220,7 @@ build-docker|docker-build)
 ;;
 
 docker)
-    docker run --rm -it -v "$PWD":/willow -e TERM --name "$DOCKER_NAME" \
+    docker run --user build --rm -it -v "$PWD":/willow -e TERM --name "$DOCKER_NAME" \
         "$DOCKER_IMAGE" /bin/bash
 ;;
 
